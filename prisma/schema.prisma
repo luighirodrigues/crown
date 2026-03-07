@@ -1,0 +1,394 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  MEMBER
+  ADMIN
+  MODERATOR
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MissionType {
+  MANUAL
+  AUTOMATIC
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  REPLY
+  APPROVAL
+  EVENT
+  SYSTEM
+}
+
+enum PresenceType {
+  GENERAL
+  ROUTINE
+}
+
+// ─── Auth (NextAuth Prisma Adapter) ─────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── User & Profile ─────────────────────────────────────
+
+model User {
+  id                 String             @id @default(cuid())
+  name               String?
+  email              String             @unique
+  emailVerified      DateTime?
+  image              String?
+  role               Role               @default(MEMBER)
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  // Auth relations
+  accounts Account[]
+  sessions Session[]
+
+  // Domain relations
+  profile            Profile?
+  posts              Post[]
+  comments           Comment[]
+  likes              Like[]
+  ritualCheckIns     RitualCheckIn[]
+  missionCompletions MissionCompletion[]
+  courseProgress      CourseProgress[]
+  notifications      Notification[]
+  pointsLedger       PointsLedger[]
+  presenceLedger     PresenceLedger[]
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  bannerUrl String?
+  bio       String?  @db.Text
+  phone     String?
+  interests String[] @default([])
+  skills    String[] @default([])
+  onboardingComplete Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Community ──────────────────────────────────────────
+
+model Channel {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  icon      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts Post[]
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  channelId String
+  authorId  String
+  title     String
+  body      String   @db.Text
+  imageUrl  String?
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  channel  Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+
+  @@index([createdAt])
+  @@index([channelId, createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  body      String   @db.Text
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([postId, createdAt])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+}
+
+// ─── Rituals ────────────────────────────────────────────
+
+model Ritual {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  imageUrl    String?
+  pointsValue Int      @default(0)
+  startAt     DateTime
+  endAt       DateTime
+  autoApprove Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  checkIns RitualCheckIn[]
+}
+
+model RitualCheckIn {
+  id               String         @id @default(cuid())
+  ritualId         String
+  userId           String
+  text             String?        @db.Text
+  imageUrl         String?
+  localDate        String         // YYYY-MM-DD in America/Sao_Paulo
+  isCounted        Boolean        @default(false)
+  status           ApprovalStatus @default(PENDING)
+  reviewedByUserId String?
+  reviewNote       String?        @db.Text
+  reviewedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  ritual Ritual @relation(fields: [ritualId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, ritualId, localDate])
+}
+
+// ─── Missions ───────────────────────────────────────────
+
+model Mission {
+  id          String      @id @default(cuid())
+  name        String
+  description String      @db.Text
+  type        MissionType @default(MANUAL)
+  autoApprove Boolean     @default(false)
+  startAt     DateTime?
+  endAt       DateTime?
+  tributos    Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  completions MissionCompletion[]
+}
+
+model MissionCompletion {
+  id               String         @id @default(cuid())
+  missionId        String
+  userId           String
+  status           ApprovalStatus @default(PENDING)
+  evidenceUrl      String?
+  reviewedByUserId String?
+  reviewNote       String?        @db.Text
+  reviewedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, userId])
+  @@index([userId, createdAt])
+}
+
+// ─── Events ─────────────────────────────────────────────
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  datetime    DateTime
+  link        String?
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([datetime])
+}
+
+// ─── Courses ────────────────────────────────────────────
+
+model Course {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lessons CourseLesson[]
+}
+
+model CourseLesson {
+  id        String   @id @default(cuid())
+  courseId   String
+  title     String
+  link      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress CourseProgress[]
+}
+
+model CourseProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  lessonId    String
+  completedAt DateTime @default(now())
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+// ─── Notifications ──────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String           @db.Text
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ─── Points & Presence Engine (scaffold) ────────────────
+
+model PointsRule {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. CREATE_POST, COMMENT, RITUAL_CHECKIN
+  label     String
+  points    Int
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PointsLedger {
+  id         String   @id @default(cuid())
+  userId     String
+  ruleKey    String
+  points     Int
+  sourceType String   // e.g. "post", "comment", "ritual_checkin", "mission"
+  sourceId   String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceType, sourceId, ruleKey])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model PresenceLedger {
+  id         String       @id @default(cuid())
+  userId     String
+  type       PresenceType
+  sourceType String
+  sourceId   String
+  createdAt  DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, sourceType, sourceId])
+  @@index([userId, createdAt])
+}
+
+// ─── Webhook (scaffold) ─────────────────────────────────
+
+model WebhookEventLog {
+  id             String   @id @default(cuid())
+  provider       String
+  eventId        String
+  receivedAt     DateTime @default(now())
+  payloadJson    Json
+  signatureValid Boolean
+  processedAt    DateTime?
+  status         String   @default("received")
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, eventId])
+}

@@ -1,26 +1,65 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ── CROWN Design Tokens (v0) ── */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Brand (vinho/bordô) */
+  --color-brand-900: #991220;
+  --color-brand-800: #A0081B;
+  --color-brand-100: #B79895;
+
+  /* Backgrounds */
+  --color-bg: #F3EAE3;
+  --color-bg-alt: #FFFDF9;
+
+  /* Surfaces */
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F6F6F7;
+
+  /* Text */
+  --color-text-primary: #15191C;
+  --color-text-secondary: #7D685D;
+  --color-muted: #CDC8CA;
+
+  /* Accents */
+  --color-gold-500: #F0D094;
+  --color-gold-300: #F5E3BF;
+  --color-success-500: #27A34A;
+  --color-danger-400: #C0575E;
+
+  /* Font */
+  --font-sans: var(--font-inter);
+
+  /* Radius */
+  --radius-card: 16px;
+  --radius-pill: 999px;
+  --radius-btn: 12px;
+  --radius-img: 14px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 4px 0 rgba(0,0,0,0.04), 0 2px 8px 0 rgba(0,0,0,0.03);
+  --shadow-nav: 0 -1px 6px 0 rgba(0,0,0,0.06);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base ── */
+
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar thin for horizontal scroll areas */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
