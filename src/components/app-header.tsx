@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import { Bell, LogOut, ChevronLeft } from "lucide-react";
+import { Bell, LogOut, ChevronLeft, Shield } from "lucide-react";
+import Link from "next/link";
 
 interface AppHeaderProps {
   title: string;
@@ -21,6 +23,8 @@ export function AppHeader({
   variant = "default",
 }: AppHeaderProps) {
   const [unreadCount, setUnreadCount] = useState(0);
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "MODERATOR";
 
   useEffect(() => {
     fetch("/api/notifications")
@@ -65,6 +69,15 @@ export function AppHeader({
       <div className="flex items-center gap-1">
         {rightActions || (
           <>
+            {isAdmin && (
+              <Link
+                href="/admin/approvals"
+                className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                title="Admin"
+              >
+                <Shield size={18} />
+              </Link>
+            )}
             <button className="p-2 rounded-full hover:bg-white/10 transition-colors relative">
               <Bell size={20} />
               {unreadCount > 0 && (

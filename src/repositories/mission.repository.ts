@@ -45,4 +45,12 @@ export const missionRepository = {
   create(data: CreateMissionData) {
     return prisma.mission.create({ data });
   },
+
+  update(id: string, data: Partial<CreateMissionData>) {
+    return prisma.mission.update({ where: { id }, data });
+  },
+
+  delete(id: string) {
+    return prisma.mission.delete({ where: { id } });
+  },
 };

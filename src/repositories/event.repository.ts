@@ -30,4 +30,18 @@ export const eventRepository = {
   }) {
     return prisma.event.create({ data });
   },
+
+  update(id: string, data: {
+    title?: string;
+    description?: string;
+    datetime?: Date;
+    link?: string | null;
+    location?: string | null;
+  }) {
+    return prisma.event.update({ where: { id }, data });
+  },
+
+  delete(id: string) {
+    return prisma.event.delete({ where: { id } });
+  },
 };

@@ -34,4 +34,20 @@ export const ritualRepository = {
   }) {
     return prisma.ritual.create({ data });
   },
+
+  update(id: string, data: {
+    name?: string;
+    description?: string;
+    imageUrl?: string;
+    pointsValue?: number;
+    startAt?: Date;
+    endAt?: Date;
+    autoApprove?: boolean;
+  }) {
+    return prisma.ritual.update({ where: { id }, data });
+  },
+
+  delete(id: string) {
+    return prisma.ritual.delete({ where: { id } });
+  },
 };
