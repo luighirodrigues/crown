@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AppHeader } from "@/components/app-header";
 import { Chip } from "@/components/chip";
 import { PostCard } from "@/components/post-card";
+import { ImageUpload } from "@/components/image-upload";
 import { AnimatedList, AnimatedItem } from "@/components/animated-list";
 import { Plus } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -24,7 +25,7 @@ export default function ComunidadePage() {
   const [activeChannel, setActiveChannel] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showNewPost, setShowNewPost] = useState(false);
-  const [newPost, setNewPost] = useState({ title: "", body: "", channelId: "" });
+  const [newPost, setNewPost] = useState({ title: "", body: "", channelId: "", imageUrl: "" });
   const [creating, setCreating] = useState(false);
 
   // Fetch channels
@@ -65,14 +66,20 @@ export default function ComunidadePage() {
     if (!newPost.title.trim() || !newPost.body.trim() || !newPost.channelId) return;
     setCreating(true);
     try {
+      const payload = {
+        title: newPost.title,
+        body: newPost.body,
+        channelId: newPost.channelId,
+        ...(newPost.imageUrl ? { imageUrl: newPost.imageUrl } : {}),
+      };
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPost),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         setShowNewPost(false);
-        setNewPost({ title: "", body: "", channelId: channels[1]?.id ?? "" });
+        setNewPost({ title: "", body: "", channelId: channels[1]?.id ?? "", imageUrl: "" });
         await fetchPosts();
       }
     } finally {
@@ -128,6 +135,12 @@ export default function ComunidadePage() {
                 onChange={(e) => setNewPost((p) => ({ ...p, body: e.target.value }))}
                 rows={3}
                 className="w-full text-sm px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30 resize-none"
+              />
+              <ImageUpload
+                folder="posts"
+                variant="inline"
+                currentImageUrl={newPost.imageUrl || null}
+                onUpload={(url) => setNewPost((p) => ({ ...p, imageUrl: url }))}
               />
               <button
                 onClick={handleCreatePost}

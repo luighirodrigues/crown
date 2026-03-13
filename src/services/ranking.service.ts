@@ -44,7 +44,7 @@ export const rankingService = {
     const userIds = grouped.map((g) => g.userId);
     const users = await prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, image: true },
+      select: { id: true, name: true, image: true, slug: true },
     });
     const userMap = new Map(users.map((u) => [u.id, u]));
 

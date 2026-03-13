@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Nodemailer from "next-auth/providers/nodemailer";
 import { prisma } from "@/lib/prisma";
+import { generateUniqueSlug } from "@/lib/slug";
 import type { Role } from "@prisma/client";
 
 declare module "next-auth" {
@@ -53,11 +54,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   events: {
     async createUser({ user }) {
-      // Create empty profile for new users
+      // Create empty profile and generate slug for new users
       if (user.id) {
-        await prisma.profile.create({
-          data: { userId: user.id },
-        });
+        const slug = await generateUniqueSlug(user.name || user.email?.split("@")[0] || "membro");
+        await Promise.all([
+          prisma.profile.create({ data: { userId: user.id } }),
+          prisma.user.update({ where: { id: user.id }, data: { slug } }),
+        ]);
       }
     },
   },

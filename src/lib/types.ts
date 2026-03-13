@@ -9,6 +9,7 @@ export interface User {
   id: string;
   name: string;
   avatarUrl: string;
+  slug?: string;
   role: Role;
   joinedAt: string;
 }

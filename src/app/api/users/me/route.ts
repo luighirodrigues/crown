@@ -3,6 +3,7 @@ import { pointsService } from "@/services/points.service";
 import { presenceService } from "@/services/presence.service";
 import { rankingService, getCurrentBrasiliaMonth } from "@/services/ranking.service";
 import { requireAuth, handleAuthError } from "@/lib/auth/rbac";
+import { generateUniqueSlug } from "@/lib/slug";
 import { z } from "zod/v4";
 
 export async function GET() {
@@ -14,7 +15,7 @@ export async function GET() {
       await Promise.all([
         prisma.user.findUnique({
           where: { id: userId },
-          select: { id: true, name: true, image: true, email: true, role: true, createdAt: true },
+          select: { id: true, name: true, image: true, email: true, role: true, createdAt: true, slug: true },
         }),
         prisma.profile.findUnique({ where: { userId } }),
         pointsService.getUserTotal(userId),
@@ -73,14 +74,17 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const data = updateProfileSchema.parse(body);
 
-    // Update User fields (name, image)
+    // Update User fields (name, image) — regenerate slug if name changes
     if (data.name !== undefined || data.image !== undefined) {
+      const updateData: Record<string, unknown> = {};
+      if (data.name !== undefined) {
+        updateData.name = data.name;
+        updateData.slug = await generateUniqueSlug(data.name, userId);
+      }
+      if (data.image !== undefined) updateData.image = data.image;
       await prisma.user.update({
         where: { id: userId },
-        data: {
-          ...(data.name !== undefined && { name: data.name }),
-          ...(data.image !== undefined && { image: data.image }),
-        },
+        data: updateData,
       });
     }
 

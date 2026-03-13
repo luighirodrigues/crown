@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { UserAvatar } from "./user-avatar";
 import { Crown, Gem } from "lucide-react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import type { RankingEntry } from "@/lib/types";
 
 interface RankingItemProps {
@@ -39,16 +40,20 @@ export function RankingItem({ entry, delay = 0 }: RankingItemProps) {
           entry.position
         )}
       </div>
-      <UserAvatar
-        src={entry.user.avatarUrl}
-        name={entry.user.name}
-        size="sm"
-        goldBorder={isTop3}
-      />
+      <Link href={`/perfil/${entry.user.slug || entry.user.id}`}>
+        <UserAvatar
+          src={entry.user.avatarUrl}
+          name={entry.user.name}
+          size="sm"
+          goldBorder={isTop3}
+        />
+      </Link>
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-semibold text-text-primary truncate">
-          {entry.user.name}
-        </p>
+        <Link href={`/perfil/${entry.user.slug || entry.user.id}`} className="hover:underline">
+          <p className="text-[13px] font-semibold text-text-primary truncate">
+            {entry.user.name}
+          </p>
+        </Link>
       </div>
       <div className="flex items-center gap-1 text-[12px] font-medium text-text-secondary">
         <Gem size={12} className="text-gold-500" />

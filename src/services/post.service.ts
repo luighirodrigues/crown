@@ -7,7 +7,7 @@ export const createPostSchema = z.object({
   channelId: z.string().min(1),
   title: z.string().min(1, "Título é obrigatório").max(200),
   body: z.string().min(1, "Conteúdo é obrigatório"),
-  imageUrl: z.string().url().optional(),
+  imageUrl: z.string().min(1).optional(),
 });
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;

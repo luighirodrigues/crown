@@ -47,7 +47,10 @@ export function AppHeader({
     >
       <div className="flex items-center gap-3">
         {showBack && (
-          <button className="p-1 -ml-1 rounded-full hover:bg-white/10 transition-colors">
+          <button
+            onClick={() => window.history.back()}
+            className="p-1 -ml-1 rounded-full hover:bg-white/10 transition-colors"
+          >
             <ChevronLeft size={22} />
           </button>
         )}

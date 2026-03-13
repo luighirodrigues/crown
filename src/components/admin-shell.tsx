@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 
 const adminNav = [
   { href: "/admin/approvals", label: "Aprovações" },
+  { href: "/admin/membros", label: "Membros" },
+  { href: "/admin/permissoes", label: "Permissões" },
   { href: "/admin/points-rules", label: "Regras de Pontuação" },
   { href: "/admin/channels", label: "Canais" },
   { href: "/admin/rituals", label: "Rituais" },

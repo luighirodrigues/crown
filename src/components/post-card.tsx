@@ -7,6 +7,7 @@ import { Heart, MessageCircle, Share2, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { UserAvatar } from "./user-avatar";
 import { ImageUpload } from "./image-upload";
+import Link from "next/link";
 import type { Post } from "@/lib/types";
 
 interface Comment {
@@ -14,7 +15,7 @@ interface Comment {
   body: string;
   imageUrl?: string | null;
   createdAt: string;
-  author: { id: string; name: string; image?: string };
+  author: { id: string; name: string; image?: string; slug?: string | null };
   replies?: Comment[];
 }
 
@@ -118,11 +119,15 @@ export function PostCard({ post, delay = 0 }: PostCardProps) {
       <div className="p-4">
         {/* Author row */}
         <div className="flex items-center gap-3 mb-3">
-          <UserAvatar src={post.author.avatarUrl} name={post.author.name} size="sm" />
+          <Link href={`/perfil/${post.author.slug || post.author.id}`}>
+            <UserAvatar src={post.author.avatarUrl} name={post.author.name} size="sm" />
+          </Link>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary truncate">
-              {post.author.name}
-            </p>
+            <Link href={`/perfil/${post.author.slug || post.author.id}`} className="hover:underline">
+              <p className="text-[13px] font-semibold text-text-primary truncate">
+                {post.author.name}
+              </p>
+            </Link>
             <p className="text-[11px] text-text-secondary">{timeAgo(post.createdAt)}</p>
           </div>
         </div>
@@ -256,16 +261,20 @@ function CommentItem({ comment }: { comment: Comment }) {
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
-        <UserAvatar
-          src={comment.author.image ?? ""}
-          name={comment.author.name}
-          size="sm"
-        />
+        <Link href={`/perfil/${comment.author.slug || comment.author.id}`}>
+          <UserAvatar
+            src={comment.author.image ?? ""}
+            name={comment.author.name}
+            size="sm"
+          />
+        </Link>
         <div className="flex-1 min-w-0">
           <div className="bg-surface-alt rounded-xl px-3 py-2">
-            <p className="text-[12px] font-semibold text-text-primary">
-              {comment.author.name}
-            </p>
+            <Link href={`/perfil/${comment.author.slug || comment.author.id}`} className="hover:underline">
+              <p className="text-[12px] font-semibold text-text-primary">
+                {comment.author.name}
+              </p>
+            </Link>
             <p className="text-[13px] text-text-secondary leading-relaxed">
               {comment.body}
             </p>
@@ -291,16 +300,20 @@ function CommentItem({ comment }: { comment: Comment }) {
         <div className="ml-10 space-y-2">
           {comment.replies.map((reply) => (
             <div key={reply.id} className="flex gap-2">
-              <UserAvatar
-                src={reply.author.image ?? ""}
-                name={reply.author.name}
-                size="sm"
-              />
+              <Link href={`/perfil/${reply.author.slug || reply.author.id}`}>
+                <UserAvatar
+                  src={reply.author.image ?? ""}
+                  name={reply.author.name}
+                  size="sm"
+                />
+              </Link>
               <div className="flex-1 min-w-0">
                 <div className="bg-surface-alt rounded-xl px-3 py-2">
-                  <p className="text-[12px] font-semibold text-text-primary">
-                    {reply.author.name}
-                  </p>
+                  <Link href={`/perfil/${reply.author.slug || reply.author.id}`} className="hover:underline">
+                    <p className="text-[12px] font-semibold text-text-primary">
+                      {reply.author.name}
+                    </p>
+                  </Link>
                   <p className="text-[13px] text-text-secondary leading-relaxed">
                     {reply.body}
                   </p>

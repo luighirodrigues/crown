@@ -2,6 +2,17 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+function nameToSlug(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
 async function main() {
   console.log("🌱 Seeding database...");
 
@@ -14,6 +25,7 @@ async function main() {
     create: {
       email: adminEmail,
       name: "Admin Crown",
+      slug: nameToSlug("Admin Crown"),
       role: "ADMIN",
       emailVerified: new Date(),
       image: "https://api.dicebear.com/9.x/notionists/svg?seed=admin",
@@ -43,6 +55,7 @@ async function main() {
       create: {
         email: m.email,
         name: m.name,
+        slug: nameToSlug(m.name),
         role: "MEMBER",
         emailVerified: new Date(),
         image: `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(m.name)}`,
