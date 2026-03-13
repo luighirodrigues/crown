@@ -28,7 +28,7 @@
   --color-danger-400: #C0575E;
 
   /* Font */
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-montserrat);
 
   /* Radius */
   --radius-card: 16px;
