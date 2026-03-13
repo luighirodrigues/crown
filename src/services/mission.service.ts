@@ -32,6 +32,20 @@ export const missionService = {
     return missionRepository.findActive();
   },
 
+  async listActiveForUser(userId: string) {
+    const [missions, completions] = await Promise.all([
+      missionRepository.findActive(),
+      missionCompletionRepository.findByUser(userId),
+    ]);
+    const completionByMission = new Map(
+      completions.map((c) => [c.missionId, c])
+    );
+    return missions.map((m) => ({
+      ...m,
+      userCompletion: completionByMission.get(m.id) ?? null,
+    }));
+  },
+
   async findById(id: string) {
     return missionRepository.findById(id);
   },
@@ -59,11 +73,30 @@ export const missionService = {
 
     // Check if already completed (unique constraint will catch duplicates)
     const existing = await missionCompletionRepository.findByUserAndMission(userId, missionId);
-    if (existing) throw new Error("Você já completou esta missão");
+    if (existing && existing.status !== "REJECTED") {
+      throw new Error("Você já completou esta missão");
+    }
 
     const status = mission.autoApprove ? "APPROVED" : "PENDING";
 
     try {
+      // If resubmitting a rejected completion, update instead of create
+      if (existing && existing.status === "REJECTED") {
+        const completion = await missionCompletionRepository.resubmit(existing.id, {
+          evidenceUrl: input.evidenceUrl,
+          status,
+        });
+
+        if (mission.autoApprove) {
+          await Promise.all([
+            pointsService.awardPoints(userId, "MISSION_COMPLETE", "mission", completion.id),
+            presenceService.recordGeneral(userId, "mission", completion.id),
+          ]);
+        }
+
+        return completion;
+      }
+
       const completion = await missionCompletionRepository.create({
         missionId,
         userId,

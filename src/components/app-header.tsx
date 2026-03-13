@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Bell, LogOut, ChevronLeft, Shield } from "lucide-react";
 import Link from "next/link";
+import { NotificationsPanel } from "@/components/notifications-panel";
 
 interface AppHeaderProps {
   title: string;
@@ -23,6 +24,7 @@ export function AppHeader({
   variant = "default",
 }: AppHeaderProps) {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "MODERATOR";
 
@@ -36,6 +38,7 @@ export function AppHeader({
   }, []);
 
   return (
+    <>
     <header
       className={cn(
         "sticky top-0 z-40 px-4 py-3 flex items-center justify-between",
@@ -78,7 +81,10 @@ export function AppHeader({
                 <Shield size={18} />
               </Link>
             )}
-            <button className="p-2 rounded-full hover:bg-white/10 transition-colors relative">
+            <button
+              onClick={() => setNotifOpen(true)}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors relative"
+            >
               <Bell size={20} />
               {unreadCount > 0 && (
                 <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 flex items-center justify-center bg-gold-500 text-[9px] font-bold text-brand-900 rounded-full">
@@ -96,5 +102,12 @@ export function AppHeader({
         )}
       </div>
     </header>
+
+    <NotificationsPanel
+      open={notifOpen}
+      onClose={() => setNotifOpen(false)}
+      onUnreadCountChange={setUnreadCount}
+    />
+    </>
   );
 }

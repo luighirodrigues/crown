@@ -119,6 +119,12 @@ model Profile {
   userId    String   @unique
   bannerUrl String?
   bio       String?  @db.Text
+  displayName  String?
+  profession   String?
+  birthday     DateTime?
+  city         String?
+  instagram    String?
+  externalLink String?
   phone     String?
   interests String[] @default([])
   skills    String[] @default([])
@@ -168,6 +174,7 @@ model Comment {
   postId    String
   authorId  String
   body      String   @db.Text
+  imageUrl  String?
   parentId  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

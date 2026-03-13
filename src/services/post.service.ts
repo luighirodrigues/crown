@@ -17,6 +17,13 @@ export const postService = {
     return postRepository.findByChannel(channelId, opts);
   },
 
+  async listByChannelForUser(channelId: string | null, userId: string, opts?: { take?: number; skip?: number }) {
+    const posts = await postRepository.findByChannel(channelId, opts);
+    const postIds = posts.map((p) => p.id);
+    const likedSet = await postRepository.getLikedPostIds(postIds, userId);
+    return posts.map((p) => ({ ...p, liked: likedSet.has(p.id) }));
+  },
+
   async listRecent(limit?: number) {
     return postRepository.findRecent(limit);
   },

@@ -24,6 +24,23 @@ export const courseRepository = {
     });
   },
 
+  /** Get all completed lesson IDs for a user */
+  findUserProgress(userId: string) {
+    return prisma.courseProgress.findMany({
+      where: { userId },
+      select: { lessonId: true },
+    });
+  },
+
+  /** Mark a lesson as completed (idempotent via unique constraint) */
+  completeLesson(userId: string, lessonId: string) {
+    return prisma.courseProgress.upsert({
+      where: { userId_lessonId: { userId, lessonId } },
+      create: { userId, lessonId },
+      update: {},
+    });
+  },
+
   create(data: {
     name: string;
     description: string;

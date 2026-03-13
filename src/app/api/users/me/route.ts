@@ -3,13 +3,14 @@ import { pointsService } from "@/services/points.service";
 import { presenceService } from "@/services/presence.service";
 import { rankingService, getCurrentBrasiliaMonth } from "@/services/ranking.service";
 import { requireAuth, handleAuthError } from "@/lib/auth/rbac";
+import { z } from "zod/v4";
 
 export async function GET() {
   try {
     const sessionUser = await requireAuth();
     const userId = sessionUser.id;
 
-    const [user, profile, totalTributos, presenceCounts, postsCount, commentsCount] =
+    const [user, profile, totalTributos, presenceCounts, postsCount, commentsCount, pointsHistory] =
       await Promise.all([
         prisma.user.findUnique({
           where: { id: userId },
@@ -20,6 +21,7 @@ export async function GET() {
         presenceService.getUserCounts(userId),
         prisma.post.count({ where: { authorId: userId } }),
         prisma.comment.count({ where: { authorId: userId } }),
+        pointsService.getUserHistory(userId, { take: 50 }),
       ]);
 
     if (!user) {
@@ -34,6 +36,7 @@ export async function GET() {
     return Response.json({
       ...user,
       profile,
+      pointsHistory,
       stats: {
         totalTributos,
         presencaGeral: presenceCounts.general,
@@ -43,6 +46,66 @@ export async function GET() {
         rankPosition: rankPosition > 0 ? rankPosition : null,
       },
     });
+  } catch (error) {
+    return handleAuthError(error);
+  }
+}
+
+const updateProfileSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  image: z.string().max(500).optional(),
+  bio: z.string().max(500).optional(),
+  bannerUrl: z.string().max(500).optional(),
+  displayName: z.string().max(100).optional(),
+  profession: z.string().max(100).optional(),
+  birthday: z.string().optional(),
+  city: z.string().max(100).optional(),
+  instagram: z.string().max(100).optional(),
+  externalLink: z.string().max(300).optional(),
+  interests: z.array(z.string().max(50)).max(20).optional(),
+  skills: z.array(z.string().max(50)).max(20).optional(),
+});
+
+export async function PATCH(request: Request) {
+  try {
+    const sessionUser = await requireAuth();
+    const userId = sessionUser.id;
+    const body = await request.json();
+    const data = updateProfileSchema.parse(body);
+
+    // Update User fields (name, image)
+    if (data.name !== undefined || data.image !== undefined) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.image !== undefined && { image: data.image }),
+        },
+      });
+    }
+
+    // Update Profile fields
+    const profileData: Record<string, unknown> = {};
+    if (data.bio !== undefined) profileData.bio = data.bio;
+    if (data.bannerUrl !== undefined) profileData.bannerUrl = data.bannerUrl;
+    if (data.displayName !== undefined) profileData.displayName = data.displayName;
+    if (data.profession !== undefined) profileData.profession = data.profession;
+    if (data.birthday !== undefined) profileData.birthday = data.birthday ? new Date(data.birthday) : null;
+    if (data.city !== undefined) profileData.city = data.city;
+    if (data.instagram !== undefined) profileData.instagram = data.instagram;
+    if (data.externalLink !== undefined) profileData.externalLink = data.externalLink;
+    if (data.interests !== undefined) profileData.interests = data.interests;
+    if (data.skills !== undefined) profileData.skills = data.skills;
+
+    if (Object.keys(profileData).length > 0) {
+      await prisma.profile.upsert({
+        where: { userId },
+        update: profileData,
+        create: { userId, ...profileData } as never,
+      });
+    }
+
+    return Response.json({ ok: true });
   } catch (error) {
     return handleAuthError(error);
   }

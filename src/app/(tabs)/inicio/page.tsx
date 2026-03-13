@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { Card } from "@/components/card";
 import { SectionHeader } from "@/components/section-header";
@@ -17,6 +18,7 @@ import { toPost, toEvent, toRitual, toRankingEntry, toMission } from "@/lib/tran
 import type { Post, CrownEvent, Ritual, RankingEntry, Mission } from "@/lib/types";
 
 export default function InicioPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
   const [upcomingEvents, setUpcomingEvents] = useState<CrownEvent[]>([]);
@@ -43,7 +45,7 @@ export default function InicioPage() {
 
       if (missionsRes.ok) {
         const missionsData = await missionsRes.json();
-        setMissions(missionsData.map((m: Record<string, unknown>) => toMission(m)));
+        setMissions(missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null)));
       }
 
       if (ritualsRes.ok) {
@@ -63,6 +65,29 @@ export default function InicioPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleCompleteMission = useCallback(async (missionId: string) => {
+    try {
+      const res = await fetch(`/api/missions/${missionId}/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? "Erro ao concluir missão");
+        return;
+      }
+      // Refresh missions to reflect new status
+      const missionsRes = await fetch("/api/missions");
+      if (missionsRes.ok) {
+        const missionsData = await missionsRes.json();
+        setMissions(missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null)));
+      }
+    } catch {
+      alert("Erro ao concluir missão");
+    }
+  }, []);
 
   const completedMissions = missions.filter((m) => m.status === "APPROVED").length;
   const totalMissions = missions.length;
@@ -141,7 +166,12 @@ export default function InicioPage() {
               />
               <div className="space-y-3">
                 {missions.map((mission, i) => (
-                  <MissionCard key={mission.id} mission={mission} delay={i * 0.06} />
+                  <MissionCard
+                    key={mission.id}
+                    mission={mission}
+                    delay={i * 0.06}
+                    onComplete={handleCompleteMission}
+                  />
                 ))}
               </div>
             </div>
@@ -158,6 +188,7 @@ export default function InicioPage() {
                     ritual={ritual}
                     variant="compact"
                     delay={i * 0.08}
+                    onClick={() => router.push("/rituais")}
                   />
                 ))}
               </div>

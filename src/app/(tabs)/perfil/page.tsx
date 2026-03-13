@@ -7,6 +7,7 @@ import { SectionHeader } from "@/components/section-header";
 import { UserAvatar } from "@/components/user-avatar";
 import { EmptyState } from "@/components/empty-state";
 import { AnimatedList, AnimatedItem } from "@/components/animated-list";
+import { ImageUpload } from "@/components/image-upload";
 import {
   Crown,
   Gem,
@@ -21,7 +22,14 @@ import {
   Medal,
   LogIn,
   Settings,
-  Camera,
+  X,
+  Check,
+  Plus,
+  Briefcase,
+  Calendar,
+  MapPin,
+  Instagram,
+  LinkIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
@@ -41,6 +49,14 @@ const iconMap: Record<string, React.ComponentType<{ size?: number; className?: s
   "log-in": LogIn,
 };
 
+interface PointsEntry {
+  id: string;
+  ruleKey: string;
+  points: number;
+  sourceType: string;
+  createdAt: string;
+}
+
 interface UserProfile {
   id: string;
   name: string;
@@ -50,9 +66,17 @@ interface UserProfile {
   createdAt: string;
   profile: {
     bio: string | null;
+    bannerUrl: string | null;
+    displayName: string | null;
+    profession: string | null;
+    birthday: string | null;
+    city: string | null;
+    instagram: string | null;
+    externalLink: string | null;
     interests: string[];
     skills: string[];
   } | null;
+  pointsHistory: PointsEntry[];
   stats: {
     totalTributos: number;
     presencaGeral: number;
@@ -63,10 +87,53 @@ interface UserProfile {
   };
 }
 
+const ruleLabels: Record<string, string> = {
+  CREATE_POST: "Criar post",
+  COMMENT: "Comentar",
+  RITUAL_CHECKIN: "Check-in em ritual",
+  MISSION_COMPLETE: "Completar missão",
+  LESSON_COMPLETE: "Completar aula",
+};
+
+const sourceIcons: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  post: FileText,
+  comment: MessageCircle,
+  ritual_checkin: Flame,
+  mission: Target,
+  course_lesson: Trophy,
+};
+
+function formatAge(birthday: string): string {
+  const birth = new Date(birthday);
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const monthDiff = now.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
+    age--;
+  }
+  return `${age} anos`;
+}
+
 export default function PerfilPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [rituals, setRituals] = useState<Ritual[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Draft fields for editing
+  const [draftBio, setDraftBio] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const [draftProfession, setDraftProfession] = useState("");
+  const [draftBirthday, setDraftBirthday] = useState("");
+  const [draftCity, setDraftCity] = useState("");
+  const [draftInstagram, setDraftInstagram] = useState("");
+  const [draftExternalLink, setDraftExternalLink] = useState("");
+  const [draftInterests, setDraftInterests] = useState<string[]>([]);
+  const [draftSkills, setDraftSkills] = useState<string[]>([]);
+  const [newInterest, setNewInterest] = useState("");
+  const [newSkill, setNewSkill] = useState("");
+  const [visibleHistory, setVisibleHistory] = useState(10);
 
   const fetchData = useCallback(async () => {
     try {
@@ -89,6 +156,50 @@ export default function PerfilPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  function enterEditMode() {
+    setDraftBio(profile?.profile?.bio ?? "");
+    setDraftName(profile?.name ?? "");
+    setDraftProfession(profile?.profile?.profession ?? "");
+    setDraftBirthday(profile?.profile?.birthday ? profile.profile.birthday.split("T")[0] : "");
+    setDraftCity(profile?.profile?.city ?? "");
+    setDraftInstagram(profile?.profile?.instagram ?? "");
+    setDraftExternalLink(profile?.profile?.externalLink ?? "");
+    setDraftInterests(profile?.profile?.interests ?? []);
+    setDraftSkills(profile?.profile?.skills ?? []);
+    setNewInterest("");
+    setNewSkill("");
+    setEditing(true);
+  }
+
+  function cancelEditMode() {
+    setEditing(false);
+  }
+
+  async function saveProfile() {
+    setSaving(true);
+    try {
+      await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bio: draftBio,
+          name: draftName,
+          profession: draftProfession,
+          birthday: draftBirthday || undefined,
+          city: draftCity,
+          instagram: draftInstagram,
+          externalLink: draftExternalLink,
+          interests: draftInterests,
+          skills: draftSkills,
+        }),
+      });
+      await fetchData();
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading || !profile) {
     return (
@@ -113,28 +224,79 @@ export default function PerfilPage() {
       {/* Banner + Avatar */}
       <div className="relative">
         {/* Banner */}
-        <div className="h-36 bg-gradient-to-br from-brand-900 via-brand-800 to-brand-900 relative overflow-hidden">
-          {/* Decorative pattern */}
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-4 right-8 w-24 h-24 border border-white/30 rounded-full" />
-            <div className="absolute bottom-2 left-12 w-16 h-16 border border-white/20 rounded-full" />
-            <div className="absolute top-8 left-1/3 w-8 h-8 border border-white/25 rounded-full" />
-          </div>
+        <div className={`h-36 bg-gradient-to-br from-brand-900 via-brand-800 to-brand-900 relative overflow-hidden ${editing ? "group/banner cursor-pointer" : ""}`}>
+          {/* Banner image if set */}
+          {profile.profile?.bannerUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.profile.bannerUrl}
+              alt="Banner"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+          {/* Decorative pattern (shown when no banner image) */}
+          {!profile.profile?.bannerUrl && (
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute top-4 right-8 w-24 h-24 border border-white/30 rounded-full" />
+              <div className="absolute bottom-2 left-12 w-16 h-16 border border-white/20 rounded-full" />
+              <div className="absolute top-8 left-1/3 w-8 h-8 border border-white/25 rounded-full" />
+            </div>
+          )}
+
+          {/* Banner hover overlay — only in edit mode */}
+          {editing && (
+            <ImageUpload
+              folder="banners"
+              variant="banner"
+              currentImageUrl={profile.profile?.bannerUrl}
+              onUpload={async (url) => {
+                await fetch("/api/users/me", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ bannerUrl: url }),
+                });
+                fetchData();
+              }}
+              className="absolute inset-0 w-full h-full flex items-center justify-center bg-black/0 group-hover/banner:bg-black/40 transition-all opacity-0 group-hover/banner:opacity-100 rounded-none"
+            />
+          )}
 
           {/* Top actions */}
-          <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 text-white text-[11px] font-medium hover:bg-white/25 transition-colors backdrop-blur-sm">
-              <Camera size={13} />
-              Personalizar Banner
-            </button>
-            <button className="p-2 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors backdrop-blur-sm">
-              <Settings size={16} />
-            </button>
+          <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+            {editing && (
+              <>
+                <button
+                  onClick={cancelEditMode}
+                  className="p-2 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors backdrop-blur-sm"
+                  title="Cancelar"
+                >
+                  <X size={16} />
+                </button>
+                <button
+                  onClick={saveProfile}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-600 text-white text-[11px] font-medium hover:bg-green-700 transition-colors backdrop-blur-sm disabled:opacity-50"
+                  title="Salvar"
+                >
+                  <Check size={14} />
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
+              </>
+            )}
+            {!editing && (
+              <button
+                onClick={enterEditMode}
+                className="p-2 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors backdrop-blur-sm"
+                title="Editar perfil"
+              >
+                <Settings size={16} />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Avatar overlapping */}
-        <div className="absolute -bottom-10 left-4">
+        <div className={`absolute -bottom-10 left-4 ${editing ? "group/avatar" : ""}`}>
           <UserAvatar
             src={profile.image ?? ""}
             name={profile.name ?? ""}
@@ -142,6 +304,22 @@ export default function PerfilPage() {
             goldBorder
             className="border-4 border-bg"
           />
+          {editing && (
+            <ImageUpload
+              folder="avatars"
+              variant="avatar"
+              currentImageUrl={profile.image}
+              onUpload={async (url) => {
+                await fetch("/api/users/me", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ image: url }),
+                });
+                fetchData();
+              }}
+              className="opacity-0 group-hover/avatar:opacity-100 transition-opacity"
+            />
+          )}
         </div>
       </div>
 
@@ -184,13 +362,139 @@ export default function PerfilPage() {
             </Card>
           </AnimatedItem>
 
-          {/* História */}
+          {/* História da Rainha */}
           <AnimatedItem>
             <Card>
-              <SectionHeader title="História" />
-              <p className="text-[14px] text-text-secondary leading-relaxed">
-                {bio || "Nenhuma bio definida ainda. Edite seu perfil para contar sua história!"}
-              </p>
+              <SectionHeader title="✨ História da Rainha" />
+              {editing ? (
+                <div className="space-y-4">
+                  {/* Biografia */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5 block">Biografia</label>
+                    <textarea
+                      value={draftBio}
+                      onChange={(e) => setDraftBio(e.target.value.slice(0, 500))}
+                      placeholder="Conte sua história aqui..."
+                      rows={4}
+                      className="w-full text-[14px] px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30 resize-none leading-relaxed"
+                    />
+                    <p className="text-[11px] text-muted text-right mt-1">{draftBio.length}/500</p>
+                  </div>
+
+                  {/* Nome de exibição */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5 block">Nome</label>
+                    <input
+                      type="text"
+                      value={draftName}
+                      onChange={(e) => setDraftName(e.target.value)}
+                      placeholder="Seu nome"
+                      className="w-full text-[14px] px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                    />
+                  </div>
+
+                  {/* Profissão & Aniversário */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5 block">Profissão</label>
+                      <input
+                        type="text"
+                        value={draftProfession}
+                        onChange={(e) => setDraftProfession(e.target.value)}
+                        placeholder="Sua profissão"
+                        className="w-full text-[14px] px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5 block">Aniversário</label>
+                      <input
+                        type="date"
+                        value={draftBirthday}
+                        onChange={(e) => setDraftBirthday(e.target.value)}
+                        className="w-full text-[14px] px-3 py-2 rounded-xl border border-muted/30 bg-surface text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cidade & Instagram */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5 block">Cidade</label>
+                      <input
+                        type="text"
+                        value={draftCity}
+                        onChange={(e) => setDraftCity(e.target.value)}
+                        placeholder="Sua cidade"
+                        className="w-full text-[14px] px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5 block">Instagram</label>
+                      <input
+                        type="text"
+                        value={draftInstagram}
+                        onChange={(e) => setDraftInstagram(e.target.value)}
+                        placeholder="Seu @"
+                        className="w-full text-[14px] px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Link externo */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5 block">Link externo / Site</label>
+                    <input
+                      type="text"
+                      value={draftExternalLink}
+                      onChange={(e) => setDraftExternalLink(e.target.value)}
+                      placeholder="seusite.com.br"
+                      className="w-full text-[14px] px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-[14px] text-text-secondary leading-relaxed">
+                    {bio || "Nenhuma bio definida ainda. Edite seu perfil para contar sua história!"}
+                  </p>
+
+                  {/* Metadata row */}
+                  {(profile.profile?.profession || profile.profile?.birthday || profile.profile?.city || profile.profile?.instagram || profile.profile?.externalLink) && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-3 border-t border-muted/15">
+                      {profile.profile?.profession && (
+                        <span className="flex items-center gap-1.5 text-[12px] text-text-secondary">
+                          <Briefcase size={13} className="text-muted" />
+                          {profile.profile.profession}
+                        </span>
+                      )}
+                      {profile.profile?.birthday && (
+                        <span className="flex items-center gap-1.5 text-[12px] text-text-secondary">
+                          <Calendar size={13} className="text-muted" />
+                          {formatAge(profile.profile.birthday)}
+                        </span>
+                      )}
+                      {profile.profile?.city && (
+                        <span className="flex items-center gap-1.5 text-[12px] text-text-secondary">
+                          <MapPin size={13} className="text-muted" />
+                          {profile.profile.city}
+                        </span>
+                      )}
+                      {profile.profile?.instagram && (
+                        <span className="flex items-center gap-1.5 text-[12px] text-brand-900 font-medium">
+                          <Instagram size={13} />
+                          {profile.profile.instagram}
+                        </span>
+                      )}
+                      {profile.profile?.externalLink && (
+                        <span className="flex items-center gap-1.5 text-[12px] text-brand-900 font-medium">
+                          <LinkIcon size={13} />
+                          Site / Link
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </Card>
           </AnimatedItem>
 
@@ -243,42 +547,146 @@ export default function PerfilPage() {
           </AnimatedItem>
 
           {/* Interesses & Habilidades */}
-          {(interests.length > 0 || skills.length > 0) && (
+          {(editing || interests.length > 0 || skills.length > 0) && (
             <AnimatedItem>
               <Card>
                 <SectionHeader title="Interesses & Habilidades" />
-                <div className="space-y-3">
-                  {interests.length > 0 && (
+                {editing ? (
+                  <div className="space-y-4">
+                    {/* Interesses editing */}
                     <div>
                       <p className="text-[12px] font-medium text-text-secondary mb-2">Interesses</p>
-                      <div className="flex flex-wrap gap-2">
-                        {interests.map((interest) => (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {draftInterests.map((interest) => (
                           <span
                             key={interest}
-                            className="px-3 py-1 rounded-full bg-brand-900/8 text-brand-900 text-[12px] font-medium"
+                            className="flex items-center gap-1 px-3 py-1 rounded-full bg-brand-900/8 text-brand-900 text-[12px] font-medium"
                           >
                             {interest}
+                            <button
+                              onClick={() => setDraftInterests((prev) => prev.filter((i) => i !== interest))}
+                              className="ml-0.5 hover:text-red-500 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
                           </span>
                         ))}
                       </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newInterest}
+                          onChange={(e) => setNewInterest(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newInterest.trim()) {
+                              e.preventDefault();
+                              if (!draftInterests.includes(newInterest.trim())) {
+                                setDraftInterests((prev) => [...prev, newInterest.trim()]);
+                              }
+                              setNewInterest("");
+                            }
+                          }}
+                          placeholder="Adicionar interesse..."
+                          className="flex-1 text-[13px] px-3 py-1.5 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                        />
+                        <button
+                          onClick={() => {
+                            if (newInterest.trim() && !draftInterests.includes(newInterest.trim())) {
+                              setDraftInterests((prev) => [...prev, newInterest.trim()]);
+                              setNewInterest("");
+                            }
+                          }}
+                          className="p-1.5 rounded-xl bg-brand-900/10 text-brand-900 hover:bg-brand-900/20 transition-colors"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
-                  )}
-                  {skills.length > 0 && (
+
+                    {/* Habilidades editing */}
                     <div>
                       <p className="text-[12px] font-medium text-text-secondary mb-2">Habilidades</p>
-                      <div className="flex flex-wrap gap-2">
-                        {skills.map((skill) => (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {draftSkills.map((skill) => (
                           <span
                             key={skill}
-                            className="px-3 py-1 rounded-full bg-gold-500/15 text-amber-700 text-[12px] font-medium"
+                            className="flex items-center gap-1 px-3 py-1 rounded-full bg-gold-500/15 text-amber-700 text-[12px] font-medium"
                           >
                             {skill}
+                            <button
+                              onClick={() => setDraftSkills((prev) => prev.filter((s) => s !== skill))}
+                              className="ml-0.5 hover:text-red-500 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
                           </span>
                         ))}
                       </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newSkill}
+                          onChange={(e) => setNewSkill(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newSkill.trim()) {
+                              e.preventDefault();
+                              if (!draftSkills.includes(newSkill.trim())) {
+                                setDraftSkills((prev) => [...prev, newSkill.trim()]);
+                              }
+                              setNewSkill("");
+                            }
+                          }}
+                          placeholder="Adicionar habilidade..."
+                          className="flex-1 text-[13px] px-3 py-1.5 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
+                        />
+                        <button
+                          onClick={() => {
+                            if (newSkill.trim() && !draftSkills.includes(newSkill.trim())) {
+                              setDraftSkills((prev) => [...prev, newSkill.trim()]);
+                              setNewSkill("");
+                            }
+                          }}
+                          className="p-1.5 rounded-xl bg-gold-500/15 text-amber-700 hover:bg-gold-500/25 transition-colors"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {interests.length > 0 && (
+                      <div>
+                        <p className="text-[12px] font-medium text-text-secondary mb-2">Interesses</p>
+                        <div className="flex flex-wrap gap-2">
+                          {interests.map((interest) => (
+                            <span
+                              key={interest}
+                              className="px-3 py-1 rounded-full bg-brand-900/8 text-brand-900 text-[12px] font-medium"
+                            >
+                              {interest}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {skills.length > 0 && (
+                      <div>
+                        <p className="text-[12px] font-medium text-text-secondary mb-2">Habilidades</p>
+                        <div className="flex flex-wrap gap-2">
+                          {skills.map((skill) => (
+                            <span
+                              key={skill}
+                              className="px-3 py-1 rounded-full bg-gold-500/15 text-amber-700 text-[12px] font-medium"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </Card>
             </AnimatedItem>
           )}
@@ -287,10 +695,49 @@ export default function PerfilPage() {
           <AnimatedItem>
             <Card>
               <SectionHeader title="Histórico de Tributos" />
-              <EmptyState
-                icon="gem"
-                message="Seu extrato de tributos aparecerá aqui conforme você participa da comunidade."
-              />
+              {profile.pointsHistory.length > 0 ? (
+                <div className="space-y-2">
+                  {profile.pointsHistory.slice(0, visibleHistory).map((entry) => {
+                    const Icon = sourceIcons[entry.sourceType] || Gem;
+                    return (
+                      <div
+                        key={entry.id}
+                        className="flex items-center justify-between py-2 px-1 border-b border-muted/10 last:border-0"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-gold-500/15 flex items-center justify-center">
+                            <Icon size={14} className="text-gold-600" />
+                          </div>
+                          <div>
+                            <p className="text-[13px] font-medium text-text-primary">
+                              {ruleLabels[entry.ruleKey] || entry.ruleKey}
+                            </p>
+                            <p className="text-[11px] text-muted">
+                              {formatDate(entry.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[13px] font-semibold text-gold-600">
+                          +{entry.points}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {profile.pointsHistory.length > visibleHistory && (
+                    <button
+                      onClick={() => setVisibleHistory((v) => v + 10)}
+                      className="w-full py-2 text-[13px] font-medium text-brand-900 hover:text-brand-800 transition-colors"
+                    >
+                      Ver mais
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <EmptyState
+                  icon="gem"
+                  message="Seu extrato de tributos aparecerá aqui conforme você participa da comunidade."
+                />
+              )}
             </Card>
           </AnimatedItem>
 

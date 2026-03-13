@@ -68,4 +68,12 @@ export const postRepository = {
       },
     });
   },
+
+  async getLikedPostIds(postIds: string[], userId: string): Promise<Set<string>> {
+    const likes = await prisma.like.findMany({
+      where: { postId: { in: postIds }, userId },
+      select: { postId: true },
+    });
+    return new Set(likes.map((l) => l.postId));
+  },
 };

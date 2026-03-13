@@ -80,11 +80,6 @@ export default function ComunidadePage() {
     }
   }
 
-  async function handleLike(postId: string) {
-    await fetch(`/api/posts/${postId}/likes`, { method: "POST" });
-    await fetchPosts();
-  }
-
   return (
     <>
       {/* Header */}
@@ -185,7 +180,6 @@ export default function ComunidadePage() {
                     key={post.id}
                     post={post}
                     delay={i * 0.05}
-                    onLike={() => handleLike(post.id)}
                   />
                 ))
               ) : (

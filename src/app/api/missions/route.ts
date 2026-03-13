@@ -4,8 +4,8 @@ import { requireAuth, requireRole, handleAuthError } from "@/lib/auth/rbac";
 
 export async function GET() {
   try {
-    await requireAuth();
-    const missions = await missionService.listActive();
+    const user = await requireAuth();
+    const missions = await missionService.listActiveForUser(user.id);
     return Response.json(missions);
   } catch (error) {
     return handleAuthError(error);

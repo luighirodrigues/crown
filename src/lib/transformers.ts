@@ -32,8 +32,9 @@ export function toPost(raw: AnyRecord): Post {
     title: raw.title ?? "",
     body: raw.body ?? "",
     imageUrl: raw.imageUrl ?? undefined,
-    likeCount: raw._count?.likes ?? 0,
-    commentCount: raw._count?.comments ?? 0,
+    likeCount: raw._count?.likes ?? raw.likeCount ?? 0,
+    commentCount: raw._count?.comments ?? raw.commentCount ?? 0,
+    liked: raw.liked ?? false,
     createdAt: raw.createdAt ?? "",
     pinned: raw.pinned ?? false,
   };
@@ -70,10 +71,12 @@ export function toRitual(raw: AnyRecord, userCheckIns?: AnyRecord[]): Ritual {
   const monthLabel = startAt.toLocaleDateString("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" });
   const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
-  // Count completed (counted + approved) check-ins for this user
-  const completedDays = userCheckIns
-    ? userCheckIns.filter((c: AnyRecord) => c.isCounted && c.status === "APPROVED").length
-    : 0;
+  // Use pre-computed completedDays from API, or count from userCheckIns, or 0
+  const completedDays = raw.completedDays != null
+    ? raw.completedDays
+    : userCheckIns
+      ? userCheckIns.filter((c: AnyRecord) => c.isCounted && c.status === "APPROVED").length
+      : 0;
 
   return {
     id: raw.id,
@@ -87,6 +90,8 @@ export function toRitual(raw: AnyRecord, userCheckIns?: AnyRecord[]): Ritual {
     totalDays,
     completedDays,
     autoApprove: raw.autoApprove ?? true,
+    participantCount: raw.participantCount ?? 0,
+    todayCheckedIn: raw.todayCheckedIn ?? false,
   };
 }
 
@@ -113,6 +118,7 @@ export function toMission(raw: AnyRecord, userCompletion?: AnyRecord | null): Mi
     description: raw.description,
     type: raw.type ?? "MANUAL",
     status: userCompletion?.status ?? "PENDING",
+    submitted: !!userCompletion,
     autoApprove: raw.autoApprove ?? false,
     startAt: raw.startAt ?? undefined,
     endAt: raw.endAt ?? undefined,
@@ -123,13 +129,17 @@ export function toMission(raw: AnyRecord, userCompletion?: AnyRecord | null): Mi
 }
 
 /** Transform a Prisma Course to UI Course */
-export function toCourse(raw: AnyRecord, userProgress?: AnyRecord[]): Course {
+export function toCourse(raw: AnyRecord): Course {
   const lessonCount = raw.lessons?.length ?? 0;
-  const completedLessons = userProgress
-    ? userProgress.filter((p: AnyRecord) =>
-        raw.lessons?.some((l: AnyRecord) => l.id === p.lessonId)
-      ).length
-    : 0;
+  const completedLessons = raw.completedLessons ?? 0;
+
+  const lessons = raw.lessons?.map((l: AnyRecord) => ({
+    id: l.id,
+    title: l.title,
+    link: l.link,
+    order: l.order ?? 0,
+    completed: l.completed ?? false,
+  }));
 
   return {
     id: raw.id,
@@ -138,6 +148,7 @@ export function toCourse(raw: AnyRecord, userProgress?: AnyRecord[]): Course {
     imageUrl: raw.imageUrl ?? "",
     lessonCount,
     completedLessons,
+    lessons,
   };
 }
 

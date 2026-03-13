@@ -60,6 +60,7 @@ export interface Post {
   imageUrl?: string;
   likeCount: number;
   commentCount: number;
+  liked: boolean;
   createdAt: string;
   pinned?: boolean;
 }
@@ -85,6 +86,8 @@ export interface Ritual {
   totalDays: number;
   completedDays: number;
   autoApprove: boolean;
+  participantCount: number;
+  todayCheckedIn: boolean;
 }
 
 export interface Mission {
@@ -93,12 +96,21 @@ export interface Mission {
   description: string;
   type: MissionType;
   status: ApprovalStatus;
+  submitted: boolean;
   autoApprove: boolean;
   startAt?: string;
   endAt?: string;
   evidenceUrl?: string;
   reviewNote?: string;
   tributos?: number;
+}
+
+export interface CourseLesson {
+  id: string;
+  title: string;
+  link: string;
+  order: number;
+  completed: boolean;
 }
 
 export interface Course {
@@ -108,6 +120,7 @@ export interface Course {
   imageUrl: string;
   lessonCount: number;
   completedLessons: number;
+  lessons?: CourseLesson[];
 }
 
 export interface RankingEntry {

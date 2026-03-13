@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { Card } from "@/components/card";
 import { AnimatedList, AnimatedItem } from "@/components/animated-list";
@@ -63,31 +64,36 @@ export default function CursosPage() {
 
             return (
               <AnimatedItem key={course.id}>
-                <Card hover className="overflow-hidden p-0">
-                  {/* Image */}
-                  <div className="relative h-40 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={course.imageUrl}
-                      alt={course.name}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                    <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
-                      <div>
-                        <h3 className="text-[15px] font-bold text-white leading-snug">
-                          {course.name}
-                        </h3>
-                        <p className="text-[12px] text-white/70 mt-0.5">
-                          {course.lessonCount} aulas
-                        </p>
+                <Link href={`/cursos/${course.id}`}>
+                  <Card hover className="overflow-hidden p-0 cursor-pointer">
+                    {/* Image */}
+                    <div className="relative h-40 overflow-hidden bg-muted/20">
+                      {course.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={course.imageUrl}
+                          alt={course.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl">📚</div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                      <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
+                        <div>
+                          <h3 className="text-[15px] font-bold text-white leading-snug">
+                            {course.name}
+                          </h3>
+                          <p className="text-[12px] text-white/70 mt-0.5">
+                            {course.lessonCount} aulas
+                          </p>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                          <Play size={18} className="text-white ml-0.5" fill="white" />
+                        </div>
                       </div>
-                      <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors">
-                        <Play size={18} className="text-white ml-0.5" fill="white" />
-                      </button>
                     </div>
-                  </div>
 
                   {/* Content */}
                   <div className="p-4">
@@ -119,6 +125,7 @@ export default function CursosPage() {
                     </div>
                   </div>
                 </Card>
+              </Link>
               </AnimatedItem>
             );
           })}

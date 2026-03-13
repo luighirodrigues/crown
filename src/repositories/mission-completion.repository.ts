@@ -20,6 +20,12 @@ export const missionCompletionRepository = {
     });
   },
 
+  findByUser(userId: string) {
+    return prisma.missionCompletion.findMany({
+      where: { userId },
+    });
+  },
+
   findPending() {
     return prisma.missionCompletion.findMany({
       where: { status: "PENDING" },
@@ -48,6 +54,20 @@ export const missionCompletionRepository = {
         reviewedByUserId,
         reviewNote,
         reviewedAt: new Date(),
+      },
+      include: { mission: true, user: true },
+    });
+  },
+
+  resubmit(id: string, data: { evidenceUrl?: string; status: ApprovalStatus }) {
+    return prisma.missionCompletion.update({
+      where: { id },
+      data: {
+        evidenceUrl: data.evidenceUrl,
+        status: data.status,
+        reviewNote: null,
+        reviewedAt: null,
+        reviewedByUserId: null,
       },
       include: { mission: true, user: true },
     });

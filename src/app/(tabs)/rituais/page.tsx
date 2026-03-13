@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { AppHeader } from "@/components/app-header";
 import { RitualCard } from "@/components/ritual-card";
-import { SectionHeader } from "@/components/section-header";
+import { RitualParticipantsModal } from "@/components/ritual-participants-modal";
 import { AnimatedList, AnimatedItem } from "@/components/animated-list";
 import { Card } from "@/components/card";
-import { StatusBadge } from "@/components/crown-badge";
+import { ImageUpload } from "@/components/image-upload";
 import { toRitual } from "@/lib/transformers";
 import type { Ritual } from "@/lib/types";
 
@@ -14,9 +14,11 @@ export default function RituaisPage() {
   const [rituals, setRituals] = useState<Ritual[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkInText, setCheckInText] = useState("");
+  const [checkInImageUrl, setCheckInImageUrl] = useState("");
   const [showCheckInForm, setShowCheckInForm] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [todayStatus, setTodayStatus] = useState<Record<string, string>>({});
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [participantsRitualId, setParticipantsRitualId] = useState<string | null>(null);
 
   const fetchRituals = useCallback(async () => {
     try {
@@ -40,15 +42,23 @@ export default function RituaisPage() {
       const res = await fetch(`/api/rituals/${ritualId}/checkins`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: checkInText || undefined }),
+        body: JSON.stringify({
+          text: checkInText || undefined,
+          imageUrl: checkInImageUrl || undefined,
+        }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        setTodayStatus((prev) => ({ ...prev, [ritualId]: data.status }));
         setShowCheckInForm(null);
         setCheckInText("");
+        setCheckInImageUrl("");
         await fetchRituals();
+        const msg = data.status === "APPROVED"
+          ? "Check-in realizado com sucesso!"
+          : "Check-in enviado! Aguardando aprovação.";
+        setSuccessMessage(msg);
+        setTimeout(() => setSuccessMessage(null), 3000);
       } else {
         const err = await res.json();
         alert(err.error || "Erro ao criar check-in");
@@ -86,11 +96,25 @@ export default function RituaisPage() {
       <AppHeader title="Salão dos Rituais" />
 
       <div className="px-4 py-4 space-y-6">
+        {/* Success toast */}
+        {successMessage && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2 duration-300">
+            {successMessage}
+          </div>
+        )}
+
         <AnimatedList className="space-y-6">
           {sortedGroups.map(([month, groupRituals]) => (
             <AnimatedItem key={month}>
               <div>
-                <SectionHeader title={`Rituais de ${month}`} />
+                {/* Section header - uppercase red with decorative line */}
+                <div className="mb-4">
+                  <h2 className="text-[15px] font-bold text-brand-900 uppercase tracking-wider text-center">
+                    Rituais de {month}
+                  </h2>
+                  <div className="mt-1.5 h-[2px] bg-gradient-to-r from-transparent via-brand-900 to-transparent rounded-full" />
+                </div>
+
                 <div className="space-y-4">
                   {groupRituals.map((ritual, i) => (
                     <div key={ritual.id}>
@@ -98,43 +122,41 @@ export default function RituaisPage() {
                         ritual={ritual}
                         delay={i * 0.1}
                         onCheckIn={() => setShowCheckInForm(ritual.id)}
+                        onViewParticipants={() => setParticipantsRitualId(ritual.id)}
                       />
-                      {/* Check-in status & form */}
-                      {(todayStatus[ritual.id] || showCheckInForm === ritual.id) && (
+                      {/* Check-in form */}
+                      {showCheckInForm === ritual.id && (
                         <div className="mt-2 px-1">
-                          {todayStatus[ritual.id] && (
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs text-text-secondary">Hoje:</span>
-                              <StatusBadge status={todayStatus[ritual.id] as "PENDING" | "APPROVED" | "REJECTED"} />
+                          <Card className="p-3 space-y-2">
+                            <textarea
+                              placeholder="Compartilhe como foi seu ritual hoje..."
+                              value={checkInText}
+                              onChange={(e) => setCheckInText(e.target.value)}
+                              rows={2}
+                              className="w-full text-sm px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30 resize-none"
+                            />
+                            <ImageUpload
+                              folder="checkins"
+                              variant="inline"
+                              currentImageUrl={checkInImageUrl || null}
+                              onUpload={(url) => setCheckInImageUrl(url)}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleCheckIn(ritual.id)}
+                                disabled={submitting}
+                                className="flex-1 py-2 rounded-xl bg-brand-900 text-white text-sm font-semibold hover:bg-brand-800 transition-colors disabled:opacity-50"
+                              >
+                                {submitting ? "Enviando..." : "Fazer Check-in"}
+                              </button>
+                              <button
+                                onClick={() => { setShowCheckInForm(null); setCheckInText(""); setCheckInImageUrl(""); }}
+                                className="px-3 py-2 rounded-xl border border-muted/30 text-sm text-text-secondary hover:bg-surface-alt transition-colors"
+                              >
+                                Cancelar
+                              </button>
                             </div>
-                          )}
-
-                          {showCheckInForm === ritual.id && (
-                            <Card className="p-3 space-y-2">
-                              <textarea
-                                placeholder="Compartilhe como foi seu ritual hoje..."
-                                value={checkInText}
-                                onChange={(e) => setCheckInText(e.target.value)}
-                                rows={2}
-                                className="w-full text-sm px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30 resize-none"
-                              />
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleCheckIn(ritual.id)}
-                                  disabled={submitting}
-                                  className="flex-1 py-2 rounded-xl bg-brand-900 text-white text-sm font-semibold hover:bg-brand-800 transition-colors disabled:opacity-50"
-                                >
-                                  {submitting ? "Enviando..." : "Fazer Check-in"}
-                                </button>
-                                <button
-                                  onClick={() => { setShowCheckInForm(null); setCheckInText(""); }}
-                                  className="px-3 py-2 rounded-xl border border-muted/30 text-sm text-text-secondary hover:bg-surface-alt transition-colors"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            </Card>
-                          )}
+                          </Card>
                         </div>
                       )}
                     </div>
@@ -153,6 +175,15 @@ export default function RituaisPage() {
           )}
         </AnimatedList>
       </div>
+
+      {/* Participants modal */}
+      {participantsRitualId && (
+        <RitualParticipantsModal
+          ritualId={participantsRitualId}
+          open={!!participantsRitualId}
+          onClose={() => setParticipantsRitualId(null)}
+        />
+      )}
     </>
   );
 }

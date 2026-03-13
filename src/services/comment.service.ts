@@ -7,6 +7,7 @@ import { notificationTriggerService } from "@/services/notification-trigger.serv
 
 export const createCommentSchema = z.object({
   body: z.string().min(1, "Comentário não pode ser vazio"),
+  imageUrl: z.string().optional(),
   parentId: z.string().optional(),
 });
 
@@ -22,6 +23,7 @@ export const commentService = {
       postId,
       authorId,
       body: input.body,
+      imageUrl: input.imageUrl,
       parentId: input.parentId,
     });
 

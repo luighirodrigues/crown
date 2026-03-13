@@ -4,6 +4,7 @@ interface CreateCommentData {
   postId: string;
   authorId: string;
   body: string;
+  imageUrl?: string;
   parentId?: string;
 }
 

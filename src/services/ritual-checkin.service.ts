@@ -9,7 +9,7 @@ const TIMEZONE = "America/Sao_Paulo";
 
 export const createCheckInSchema = z.object({
   text: z.string().optional(),
-  imageUrl: z.string().url().optional(),
+  imageUrl: z.string().optional(),
 });
 
 export type CreateCheckInInput = z.infer<typeof createCheckInSchema>;
@@ -29,6 +29,98 @@ export const ritualCheckInService = {
 
   async listAll() {
     return ritualRepository.findAll();
+  },
+
+  async listActiveForUser(userId: string) {
+    const [rituals, approvedCheckIns, todayCheckIns] = await Promise.all([
+      ritualRepository.findActive(),
+      ritualCheckInRepository.findCountedApprovedByUser(userId),
+      ritualCheckInRepository.findCountedByUserAndDate(userId, getBrasiliaLocalDate()),
+    ]);
+
+    const approvedCountByRitual = new Map<string, number>();
+    for (const c of approvedCheckIns) {
+      approvedCountByRitual.set(c.ritualId, (approvedCountByRitual.get(c.ritualId) ?? 0) + 1);
+    }
+
+    const todayStatusByRitual = new Map<string, string>();
+    for (const c of todayCheckIns) {
+      todayStatusByRitual.set(c.ritualId, c.status);
+    }
+
+    const ritualIds = rituals.map((r) => r.id);
+    const participantCounts = await ritualCheckInRepository.countParticipantsByRitualIds(ritualIds);
+    const participantMap = new Map(participantCounts.map((p) => [p.ritualId, p.count]));
+
+    return rituals.map((r) => ({
+      ...r,
+      completedDays: approvedCountByRitual.get(r.id) ?? 0,
+      todayStatus: todayStatusByRitual.get(r.id) ?? null,
+      todayCheckedIn: todayStatusByRitual.has(r.id),
+      participantCount: participantMap.get(r.id) ?? 0,
+    }));
+  },
+
+  /**
+   * Return all rituals enriched with per-user progress and today's check-in status.
+   */
+  async listAllForUser(userId: string) {
+    const [rituals, approvedCheckIns, todayCheckIns] = await Promise.all([
+      ritualRepository.findAll(),
+      ritualCheckInRepository.findCountedApprovedByUser(userId),
+      ritualCheckInRepository.findCountedByUserAndDate(userId, getBrasiliaLocalDate()),
+    ]);
+
+    // Count approved days per ritual
+    const approvedCountByRitual = new Map<string, number>();
+    for (const c of approvedCheckIns) {
+      approvedCountByRitual.set(c.ritualId, (approvedCountByRitual.get(c.ritualId) ?? 0) + 1);
+    }
+
+    // Today's status per ritual
+    const todayStatusByRitual = new Map<string, string>();
+    for (const c of todayCheckIns) {
+      todayStatusByRitual.set(c.ritualId, c.status);
+    }
+
+    // Participant counts
+    const ritualIds = rituals.map((r) => r.id);
+    const participantCounts = await ritualCheckInRepository.countParticipantsByRitualIds(ritualIds);
+    const participantMap = new Map(participantCounts.map((p) => [p.ritualId, p.count]));
+
+    return rituals.map((r) => ({
+      ...r,
+      completedDays: approvedCountByRitual.get(r.id) ?? 0,
+      todayStatus: todayStatusByRitual.get(r.id) ?? null,
+      todayCheckedIn: todayStatusByRitual.has(r.id),
+      participantCount: participantMap.get(r.id) ?? 0,
+    }));
+  },
+
+  /**
+   * Get participants data for a ritual (for the participants modal).
+   */
+  async getParticipants(ritualId: string) {
+    const ritual = await ritualRepository.findById(ritualId);
+    if (!ritual) throw new Error("Ritual não encontrado");
+
+    const totalDays = Math.max(
+      1,
+      Math.ceil((ritual.endAt.getTime() - ritual.startAt.getTime()) / 86400000)
+    );
+    const localDate = getBrasiliaLocalDate();
+
+    const [stats, todayCheckIns] = await Promise.all([
+      ritualCheckInRepository.getParticipantStats(ritualId),
+      ritualCheckInRepository.getTodayParticipantsWithStats(ritualId, localDate, totalDays),
+    ]);
+
+    return {
+      ritual: { id: ritual.id, name: ritual.name, description: ritual.description },
+      participantCount: stats.participantCount,
+      totalCheckIns: stats.totalCheckIns,
+      todayCheckIns,
+    };
   },
 
   /**
@@ -54,20 +146,19 @@ export const ritualCheckInService = {
 
     const localDate = getBrasiliaLocalDate(now);
 
-    // Check if there's already a counted check-in for this user+ritual+date
+    // Block second check-in of the day
     const existingCounted = await ritualCheckInRepository.findCountedByDate(
       userId,
       ritualId,
       localDate
     );
 
-    const isFirstOfDay = !existingCounted;
-
-    // Determine status
-    let status: "APPROVED" | "PENDING" = "PENDING";
-    if (isFirstOfDay && ritual.autoApprove) {
-      status = "APPROVED";
+    if (existingCounted) {
+      throw new Error("Você já fez check-in neste ritual hoje.");
     }
+
+    // First check-in of the day — always counted
+    const status: "APPROVED" | "PENDING" = ritual.autoApprove ? "APPROVED" : "PENDING";
 
     const checkIn = await ritualCheckInRepository.create({
       ritualId,
@@ -76,11 +167,11 @@ export const ritualCheckInService = {
       imageUrl: input.imageUrl,
       localDate,
       status,
-      isCounted: isFirstOfDay,
+      isCounted: true,
     });
 
-    // If counted + auto-approved → award points and presence immediately
-    if (isFirstOfDay && ritual.autoApprove) {
+    // If auto-approved → award points and presence immediately
+    if (ritual.autoApprove) {
       await Promise.all([
         pointsService.awardPoints(userId, "RITUAL_CHECKIN", "ritual_checkin", checkIn.id),
         presenceService.recordGeneral(userId, "ritual_checkin", checkIn.id),
