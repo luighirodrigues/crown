@@ -42,6 +42,14 @@ export function RitualParticipantsModal({ ritualId, open, onClose }: RitualParti
       .finally(() => setLoading(false));
   }, [open, ritualId]);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = original; };
+  }, [open]);
+
   function formatDateTime(dateStr: string) {
     const d = new Date(dateStr);
     return d.toLocaleDateString("pt-BR", {
@@ -102,7 +110,7 @@ export function RitualParticipantsModal({ ritualId, open, onClose }: RitualParti
             </button>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto px-4 pb-6">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-6">
               {loading ? (
                 <div className="py-12 text-center">
                   <div className="w-8 h-8 border-2 border-brand-900 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
