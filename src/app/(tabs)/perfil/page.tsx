@@ -30,11 +30,13 @@ import {
   MapPin,
   Instagram,
   LinkIcon,
+  FlaskConical,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
 import { toRitual } from "@/lib/transformers";
 import type { Ritual } from "@/lib/types";
+import { useLayoutVersion } from "@/lib/layout-version";
 
 // Dynamic icon resolver
 const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -115,6 +117,7 @@ function formatAge(birthday: string): string {
 }
 
 export default function PerfilPage() {
+  const { version, toggle } = useLayoutVersion();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [rituals, setRituals] = useState<Ritual[]>([]);
   const [loading, setLoading] = useState(true);
@@ -351,6 +354,37 @@ export default function PerfilPage() {
       {/* Profile sections */}
       <div className="px-4 py-3 space-y-4">
         <AnimatedList className="space-y-4">
+          {/* Layout Version Toggle */}
+          <AnimatedItem>
+            <Card>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <FlaskConical size={20} className="text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-semibold text-text-primary">Testar Novo Layout</p>
+                    <p className="text-[11px] text-text-secondary">
+                      {version === "v1" ? "Usando layout atual" : "Usando layout novo (teste)"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={toggle}
+                  className={`relative w-12 h-7 rounded-full transition-colors duration-300 ${
+                    version === "v2" ? "bg-purple-600" : "bg-muted/40"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${
+                      version === "v2" ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </Card>
+          </AnimatedItem>
+
           {/* Insígnias & Conquistas */}
           <AnimatedItem>
             <Card>

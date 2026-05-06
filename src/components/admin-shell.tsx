@@ -15,6 +15,7 @@ const adminNav = [
   { href: "/admin/events", label: "Eventos" },
   { href: "/admin/courses", label: "Cursos" },
   { href: "/admin/missions", label: "Missões" },
+  { href: "/admin/banners", label: "Banners" },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

@@ -30,7 +30,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={`${montserrat.className} ${montserrat.variable} antialiased`}>
         <Providers>
-          <div className="mx-auto max-w-[430px] min-h-screen relative">
+          <div className="mx-auto max-w-[430px] lg:max-w-full min-h-screen relative">
             {children}
           </div>
         </Providers>

@@ -17,8 +17,22 @@ import { Users, Sparkles, Crown, Gem } from "lucide-react";
 import Link from "next/link";
 import { toPost, toEvent, toRitual, toRankingEntry, toMission } from "@/lib/transformers";
 import type { Post, CrownEvent, Ritual, RankingEntry, Mission } from "@/lib/types";
+import { useLayoutVersion } from "@/lib/layout-version";
+import { useIsDesktop } from "@/lib/use-media-query";
+import InicioV2Page from "./page-v2";
+import InicioDesktopPage from "./page-desktop";
 
 export default function InicioPage() {
+  const { version } = useLayoutVersion();
+  const isDesktop = useIsDesktop();
+
+  if (isDesktop) return <InicioDesktopPage />;
+  if (version === "v2") return <InicioV2Page />;
+
+  return <InicioV1Page />;
+}
+
+function InicioV1Page() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");

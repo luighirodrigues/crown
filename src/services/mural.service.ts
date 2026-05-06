@@ -1,5 +1,6 @@
 import { eventRepository } from "@/repositories/event.repository";
 import { postRepository } from "@/repositories/post.repository";
+import { bannerRepository } from "@/repositories/banner.repository";
 import { rankingService, getCurrentBrasiliaMonth } from "@/services/ranking.service";
 import type { Role } from "@prisma/client";
 
@@ -27,11 +28,12 @@ export const muralService = {
       month = current.month;
     }
 
-    const [upcomingEvents, topPosts, rankingTop3, rankingTop5] = await Promise.all([
+    const [upcomingEvents, topPosts, rankingTop3, rankingTop5, banners] = await Promise.all([
       eventRepository.findUpcoming(3),
       postRepository.findTopByLikes(7, 5),
       rankingService.getMonthlyRanking(year, month, 3),
       rankingService.getMonthlyRanking(year, month, 5),
+      bannerRepository.findActive(),
     ]);
 
     return {
@@ -39,6 +41,7 @@ export const muralService = {
       topPosts,
       rankingTop3,
       rankingTop5,
+      banners,
       month: `${year}-${String(month).padStart(2, "0")}`,
     };
   },

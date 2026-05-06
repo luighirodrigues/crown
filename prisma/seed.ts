@@ -125,6 +125,76 @@ async function main() {
     }
   }
 
+  // ─── Legacy Rituals (imported from old platform) ─────
+  const legacyRitualsData = [
+    {
+      name: "Leitura Diária - 10 Páginas",
+      description:
+        "Desafio diário de leitura de pelo menos 10 páginas. Importado da plataforma antiga.",
+      pointsValue: 10,
+      startAt: new Date("2025-12-01T03:00:00.000Z"),
+      endAt: new Date("2026-04-30T02:59:59.000Z"),
+      autoApprove: true,
+    },
+    {
+      name: "Atividade Física Diária",
+      description:
+        "Registro diário de atividade física. Importado da plataforma antiga.",
+      pointsValue: 10,
+      startAt: new Date("2025-12-01T03:00:00.000Z"),
+      endAt: new Date("2026-04-30T02:59:59.000Z"),
+      autoApprove: true,
+    },
+    {
+      name: "Gratidão & Conquista do Dia",
+      description:
+        "Registro diário de gratidão e conquistas. Importado da plataforma antiga.",
+      pointsValue: 10,
+      startAt: new Date("2025-12-01T03:00:00.000Z"),
+      endAt: new Date("2026-04-30T02:59:59.000Z"),
+      autoApprove: true,
+    },
+    {
+      name: "Alimentação Balanceada Diária",
+      description:
+        "Registro diário de alimentação saudável. Importado da plataforma antiga.",
+      pointsValue: 10,
+      startAt: new Date("2025-12-01T03:00:00.000Z"),
+      endAt: new Date("2026-04-30T02:59:59.000Z"),
+      autoApprove: true,
+    },
+    {
+      name: "Autoestima em Alta - Selfies Diárias",
+      description:
+        "Selfie diária para cultivar autoestima. Importado da plataforma antiga.",
+      pointsValue: 10,
+      startAt: new Date("2025-12-01T03:00:00.000Z"),
+      endAt: new Date("2026-04-30T02:59:59.000Z"),
+      autoApprove: true,
+    },
+    {
+      name: "Desafio de Natal – Natal em Voz Alta",
+      description:
+        "Desafio sazonal de natal com atividades diárias. Importado da plataforma antiga.",
+      pointsValue: 10,
+      startAt: new Date("2025-12-10T03:00:00.000Z"),
+      endAt: new Date("2025-12-25T02:59:59.000Z"),
+      autoApprove: true,
+    },
+  ];
+
+  for (const r of legacyRitualsData) {
+    const existing = await prisma.ritual.findFirst({
+      where: { name: r.name },
+    });
+    if (!existing) {
+      const ritual = await prisma.ritual.create({ data: r });
+      console.log(`  ✅ Legacy Ritual: ${ritual.name} (${ritual.id})`);
+    } else {
+      console.log(`  ⏭️ Legacy Ritual already exists: ${r.name}`);
+    }
+  }
+
   // ─── Events ──────────────────────────────────────────
   const eventsData = [
     {
@@ -198,8 +268,9 @@ async function main() {
     { key: "COMMENT", label: "Comentar", points: 3 },
     { key: "RITUAL_CHECKIN", label: "Check-in em ritual", points: 10 },
     { key: "MISSION_COMPLETE", label: "Completar missão", points: 20 },
-    { key: "LESSON_COMPLETE", label: "Completar aula", points: 5 },
-  ];
+  { key: "LESSON_COMPLETE", label: "Completar aula", points: 5 },
+  { key: "IMPORTED_BALANCE", label: "Saldo importado (plataforma antiga)", points: 1 },
+];
 
   for (const rule of rulesData) {
     await prisma.pointsRule.upsert({

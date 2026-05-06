@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { BottomNavigation } from "@/components/bottom-navigation";
+import { DesktopHeader } from "@/components/desktop-header";
+import { useIsDesktop } from "@/lib/use-media-query";
 
 export default function TabsLayout({
   children,
@@ -13,6 +15,7 @@ export default function TabsLayout({
   const { status } = useSession();
   const router = useRouter();
   const [checked, setChecked] = useState(false);
+  const isDesktop = useIsDesktop();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -47,10 +50,11 @@ export default function TabsLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
-      <main className="flex-1 pb-20">
+      {isDesktop && <DesktopHeader />}
+      <main className={isDesktop ? "flex-1" : "flex-1 pb-20"}>
         {children}
       </main>
-      <BottomNavigation />
+      {!isDesktop && <BottomNavigation />}
     </div>
   );
 }

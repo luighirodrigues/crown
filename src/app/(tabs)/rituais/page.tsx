@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useIsDesktop } from "@/lib/use-media-query";
+import RituaisDesktopPage from "./page-desktop";
 import { AppHeader } from "@/components/app-header";
 import { RitualCard } from "@/components/ritual-card";
 import { RitualParticipantsModal } from "@/components/ritual-participants-modal";
@@ -11,6 +13,14 @@ import { toRitual } from "@/lib/transformers";
 import type { Ritual } from "@/lib/types";
 
 export default function RituaisPage() {
+  const isDesktop = useIsDesktop();
+
+  if (isDesktop) return <RituaisDesktopPage />;
+
+  return <RituaisMobilePage />;
+}
+
+function RituaisMobilePage() {
   const [rituals, setRituals] = useState<Ritual[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkInText, setCheckInText] = useState("");

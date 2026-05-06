@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useIsDesktop } from "@/lib/use-media-query";
+import CursosDesktopPage from "./page-desktop";
 import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { Card } from "@/components/card";
@@ -10,6 +12,14 @@ import { toCourse } from "@/lib/transformers";
 import type { Course } from "@/lib/types";
 
 export default function CursosPage() {
+  const isDesktop = useIsDesktop();
+
+  if (isDesktop) return <CursosDesktopPage />;
+
+  return <CursosMobilePage />;
+}
+
+function CursosMobilePage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -10,6 +10,10 @@ import { Plus } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toPost, toChannel } from "@/lib/transformers";
 import type { Post, Channel } from "@/lib/types";
+import { useLayoutVersion } from "@/lib/layout-version";
+import { useIsDesktop } from "@/lib/use-media-query";
+import ComunidadeV2Page from "./page-v2";
+import ComunidadeDesktopPage from "./page-desktop";
 
 const ALL_CHANNEL: Channel = {
   id: "all",
@@ -20,6 +24,16 @@ const ALL_CHANNEL: Channel = {
 };
 
 export default function ComunidadePage() {
+  const { version } = useLayoutVersion();
+  const isDesktop = useIsDesktop();
+
+  if (isDesktop) return <ComunidadeDesktopPage />;
+  if (version === "v2") return <ComunidadeV2Page />;
+
+  return <ComunidadeV1Page />;
+}
+
+function ComunidadeV1Page() {
   const [channels, setChannels] = useState<Channel[]>([ALL_CHANNEL]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [activeChannel, setActiveChannel] = useState("all");

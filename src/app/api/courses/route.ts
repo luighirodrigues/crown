@@ -14,6 +14,10 @@ export async function GET() {
     const enriched = courses.map((course) => ({
       ...course,
       completedLessons: course.lessons.filter((l) => completedSet.has(l.id)).length,
+      lessons: course.lessons.map((l) => ({
+        ...l,
+        completed: completedSet.has(l.id),
+      })),
     }));
 
     return Response.json(enriched);

@@ -67,4 +67,79 @@ export const userRepository = {
       include: { profile: true },
     });
   },
+
+  findRecentMembers(days: number, limit: number) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    return prisma.user.findMany({
+      where: { createdAt: { gte: since } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: { id: true, name: true, image: true, slug: true, createdAt: true },
+    });
+  },
+
+  findMembersSample(limit: number) {
+    return prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: { id: true, name: true, image: true, slug: true },
+    });
+  },
+
+  countAll() {
+    return prisma.user.count();
+  },
+
+  async findMembersPaginated({
+    page,
+    limit,
+    search,
+    sort,
+  }: {
+    page: number;
+    limit: number;
+    search: string;
+    sort: string;
+  }) {
+    const where = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" as const } },
+            { slug: { contains: search, mode: "insensitive" as const } },
+            { profile: { profession: { contains: search, mode: "insensitive" as const } } },
+            { profile: { city: { contains: search, mode: "insensitive" as const } } },
+            { profile: { bio: { contains: search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {};
+
+    const orderBy =
+      sort === "name"
+        ? { name: "asc" as const }
+        : { createdAt: "desc" as const };
+
+    const [members, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: {
+          profile: {
+            select: {
+              bannerUrl: true,
+              profession: true,
+              city: true,
+              bio: true,
+              instagram: true,
+            },
+          },
+        },
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return { members, total };
+  },
 };
