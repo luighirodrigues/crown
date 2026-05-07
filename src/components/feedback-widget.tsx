@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Crown, Lightbulb, Bug, MessageSquare, Loader2, CheckCircle, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,25 @@ export function FeedbackWidget({ className }: FeedbackWidgetProps) {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [isFirstVisit, setIsFirstVisit] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const seen = localStorage.getItem("feedback_widget_seen");
+    if (!seen) {
+      setIsFirstVisit(true);
+      setShowTooltip(true);
+      localStorage.setItem("feedback_widget_seen", "true");
+
+      // Auto-hide tooltip after 6 seconds
+      const timer = setTimeout(() => {
+        setShowTooltip(false);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,19 +119,50 @@ export function FeedbackWidget({ className }: FeedbackWidgetProps) {
 
   return (
     <>
-      {/* Floating Button */}
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setOpen(true)}
-        className={cn(
-          "fixed right-4 bottom-4 z-50 w-14 h-14 rounded-full bg-brand-900 text-gold-500 shadow-lg flex items-center justify-center hover:bg-brand-800 transition-colors cursor-pointer",
-          className
-        )}
-        title="Enviar feedback"
+      {/* Side Button */}
+      <div
+        className={cn("fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center", className)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
-        <Crown size={24} />
-      </motion.button>
+        {/* Tooltip */}
+        <AnimatePresence>
+          {showTooltip && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="mr-2 bg-brand-900 text-white text-xs font-medium px-3 py-2 rounded-xl shadow-lg whitespace-nowrap relative"
+            >
+              Deixe seu feedback aqui!
+              <div className="absolute right-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-brand-900 rotate-45" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Crown Button */}
+        <motion.button
+          onClick={() => setOpen(true)}
+          animate={{
+            x: isHovered ? 0 : "60%",
+            rotate: isFirstVisit ? [0, -10, 10, -10, 10, 0] : 0,
+          }}
+          transition={{
+            x: { type: "spring", stiffness: 300, damping: 25 },
+            rotate: {
+              repeat: isFirstVisit ? Infinity : 0,
+              duration: 1.2,
+              repeatDelay: 2,
+              ease: "easeInOut",
+            },
+          }}
+          className="w-12 h-12 bg-brand-900 text-gold-500 shadow-lg flex items-center justify-center rounded-l-xl cursor-pointer hover:bg-brand-800 transition-colors"
+          title="Enviar feedback"
+        >
+          <Crown size={20} />
+        </motion.button>
+      </div>
 
       {/* Drawer */}
       <AnimatePresence>
