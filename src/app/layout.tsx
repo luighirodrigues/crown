@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Montserrat } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { FeedbackWidgetWrapper } from "@/components/feedback-widget-wrapper";
 import "./globals.css";
 
 const montserrat = Montserrat({
@@ -33,6 +34,7 @@ export default function RootLayout({
           <div className="mx-auto max-w-[430px] lg:max-w-full min-h-screen relative">
             {children}
           </div>
+          <FeedbackWidgetWrapper />
         </Providers>
       </body>
     </html>

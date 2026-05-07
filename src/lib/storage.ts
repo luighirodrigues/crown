@@ -20,6 +20,7 @@ const ALLOWED_FOLDERS = new Set([
   "checkins",
   "comments",
   "posts",
+  "feedback",
 ]);
 
 export class StorageError extends Error {
