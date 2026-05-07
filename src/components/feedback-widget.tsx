@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Crown, Lightbulb, Bug, MessageSquare, Loader2, CheckCircle, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsDesktop } from "@/lib/use-media-query";
 
 const FEEDBACK_TYPES = [
   { value: "ideia", label: "Ideia", icon: Lightbulb },
@@ -30,6 +31,7 @@ export function FeedbackWidget({ className }: FeedbackWidgetProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [isFirstVisit, setIsFirstVisit] = useState(false);
+  const isDesktop = useIsDesktop();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -119,50 +121,66 @@ export function FeedbackWidget({ className }: FeedbackWidgetProps) {
 
   return (
     <>
-      {/* Side Button */}
-      <div
-        className={cn("fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center", className)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        {/* Tooltip */}
-        <AnimatePresence>
-          {showTooltip && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className="mr-2 bg-brand-900 text-white text-xs font-medium px-3 py-2 rounded-xl shadow-lg whitespace-nowrap relative"
-            >
-              Deixe seu feedback aqui!
-              <div className="absolute right-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-brand-900 rotate-45" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Crown Button */}
+      {isDesktop ? (
+        /* Desktop: Fixed bottom-right button */
         <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           onClick={() => setOpen(true)}
-          animate={{
-            x: isHovered ? 0 : "60%",
-            rotate: isFirstVisit ? [0, -10, 10, -10, 10, 0] : 0,
-          }}
-          transition={{
-            x: { type: "spring", stiffness: 300, damping: 25 },
-            rotate: {
-              repeat: isFirstVisit ? Infinity : 0,
-              duration: 1.2,
-              repeatDelay: 2,
-              ease: "easeInOut",
-            },
-          }}
-          className="w-12 h-12 bg-brand-900 text-gold-500 shadow-lg flex items-center justify-center rounded-l-xl cursor-pointer hover:bg-brand-800 transition-colors"
+          className={cn(
+            "fixed right-6 bottom-6 z-50 w-14 h-14 rounded-full bg-brand-900 text-gold-500 shadow-lg flex items-center justify-center hover:bg-brand-800 transition-colors cursor-pointer",
+            className
+          )}
           title="Enviar feedback"
         >
-          <Crown size={20} />
+          <Crown size={24} />
         </motion.button>
-      </div>
+      ) : (
+        /* Mobile: Side button with wiggle + tooltip */
+        <div
+          className={cn("fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center", className)}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {/* Tooltip */}
+          <AnimatePresence>
+            {showTooltip && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+                className="mr-2 bg-brand-900 text-white text-xs font-medium px-3 py-2 rounded-xl shadow-lg whitespace-nowrap relative"
+              >
+                Deixe seu feedback aqui!
+                <div className="absolute right-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-brand-900 rotate-45" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Crown Button */}
+          <motion.button
+            onClick={() => setOpen(true)}
+            animate={{
+              x: isHovered ? 0 : "60%",
+              rotate: isFirstVisit ? [0, -10, 10, -10, 10, 0] : 0,
+            }}
+            transition={{
+              x: { type: "spring", stiffness: 300, damping: 25 },
+              rotate: {
+                repeat: isFirstVisit ? Infinity : 0,
+                duration: 1.2,
+                repeatDelay: 2,
+                ease: "easeInOut",
+              },
+            }}
+            className="w-12 h-12 bg-brand-900 text-gold-500 shadow-lg flex items-center justify-center rounded-l-xl cursor-pointer hover:bg-brand-800 transition-colors"
+            title="Enviar feedback"
+          >
+            <Crown size={20} />
+          </motion.button>
+        </div>
+      )}
 
       {/* Drawer */}
       <AnimatePresence>
