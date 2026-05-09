@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { AnimatedList, AnimatedItem } from "@/components/animated-list";
 import { Trophy } from "lucide-react";
 import { toRankingEntry } from "@/lib/transformers";
+import { rememberRankingPosition } from "@/lib/celebration.service";
 import type { RankingEntry } from "@/lib/types";
 
 const MONTH_NAMES = [
@@ -18,15 +19,24 @@ const MONTH_NAMES = [
 export default function RankingPage() {
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [month, setMonth] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [boostedUserId, setBoostedUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchRanking = useCallback(async () => {
     try {
-      const res = await fetch("/api/ranking?limit=50");
+      const [res, meRes] = await Promise.all([
+        fetch("/api/ranking?limit=50"),
+        fetch("/api/users/me"),
+      ]);
       if (res.ok) {
         const data = await res.json();
         setRankings((data.rankings ?? []).map(toRankingEntry));
         setMonth(data.month ?? "");
+      }
+      if (meRes.ok) {
+        const me = await meRes.json();
+        setCurrentUserId(me.id ?? "");
       }
     } finally {
       setLoading(false);
@@ -36,6 +46,22 @@ export default function RankingPage() {
   useEffect(() => {
     fetchRanking();
   }, [fetchRanking]);
+
+  useEffect(() => {
+    if (!currentUserId || !month || rankings.length === 0) return;
+
+    const currentEntry = rankings.find((entry) => entry.user.id === currentUserId);
+    if (!currentEntry) return;
+
+    const storageKey = `crown:ranking-position:${currentUserId}:${month}`;
+    if (rememberRankingPosition(storageKey, currentEntry.position)) {
+      setBoostedUserId(currentUserId);
+    }
+  }, [currentUserId, month, rankings]);
+
+  const clearBoostedUser = useCallback(() => {
+    setBoostedUserId(null);
+  }, []);
 
   const monthLabel = month
     ? `${MONTH_NAMES[parseInt(month.split("-")[1], 10) - 1]} ${month.split("-")[0]}`
@@ -78,7 +104,13 @@ export default function RankingPage() {
               <Card>
                 <div className="divide-y divide-muted/15">
                   {rankings.map((entry, i) => (
-                    <RankingItem key={entry.user.id} entry={entry} delay={i * 0.05} />
+                    <RankingItem
+                      key={entry.user.id}
+                      entry={entry}
+                      delay={i * 0.05}
+                      celebrate={boostedUserId === entry.user.id}
+                      onCelebrated={clearBoostedUser}
+                    />
                   ))}
                 </div>
               </Card>

@@ -1,15 +1,19 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "./user-avatar";
 import { Crown, Gem } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { fireRankingBoost } from "@/lib/celebration.service";
 import type { RankingEntry } from "@/lib/types";
 
 interface RankingItemProps {
   entry: RankingEntry;
   delay?: number;
+  celebrate?: boolean;
+  onCelebrated?: () => void;
 }
 
 const positionColors: Record<number, string> = {
@@ -18,11 +22,19 @@ const positionColors: Record<number, string> = {
   3: "text-amber-700",
 };
 
-export function RankingItem({ entry, delay = 0 }: RankingItemProps) {
+export function RankingItem({ entry, delay = 0, celebrate = false, onCelebrated }: RankingItemProps) {
   const isTop3 = entry.position <= 3;
+  const itemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!celebrate) return;
+    void fireRankingBoost(itemRef.current);
+    onCelebrated?.();
+  }, [celebrate, onCelebrated]);
 
   return (
     <motion.div
+      ref={itemRef}
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3, delay, ease: "easeOut" }}

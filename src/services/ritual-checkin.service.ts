@@ -32,9 +32,10 @@ export const ritualCheckInService = {
   },
 
   async listActiveForUser(userId: string) {
-    const [rituals, approvedCheckIns, todayCheckIns] = await Promise.all([
+    const [rituals, approvedCheckIns, allCountedCheckIns, todayCheckIns] = await Promise.all([
       ritualRepository.findActive(),
       ritualCheckInRepository.findCountedApprovedByUser(userId),
+      ritualCheckInRepository.findCountedByUser(userId),
       ritualCheckInRepository.findCountedByUserAndDate(userId, getBrasiliaLocalDate()),
     ]);
 
@@ -48,6 +49,13 @@ export const ritualCheckInService = {
       todayStatusByRitual.set(c.ritualId, c.status);
     }
 
+    const checkInStatusesByRitual = new Map<string, typeof allCountedCheckIns>();
+    for (const c of allCountedCheckIns) {
+      const statuses = checkInStatusesByRitual.get(c.ritualId) ?? [];
+      statuses.push(c);
+      checkInStatusesByRitual.set(c.ritualId, statuses);
+    }
+
     const ritualIds = rituals.map((r) => r.id);
     const participantCounts = await ritualCheckInRepository.countParticipantsByRitualIds(ritualIds);
     const participantMap = new Map(participantCounts.map((p) => [p.ritualId, p.count]));
@@ -57,6 +65,8 @@ export const ritualCheckInService = {
       completedDays: approvedCountByRitual.get(r.id) ?? 0,
       todayStatus: todayStatusByRitual.get(r.id) ?? null,
       todayCheckedIn: todayStatusByRitual.has(r.id),
+      checkInStatuses: checkInStatusesByRitual.get(r.id) ?? [],
+      currentUserId: userId,
       participantCount: participantMap.get(r.id) ?? 0,
     }));
   },
@@ -65,9 +75,10 @@ export const ritualCheckInService = {
    * Return all rituals enriched with per-user progress and today's check-in status.
    */
   async listAllForUser(userId: string) {
-    const [rituals, approvedCheckIns, todayCheckIns] = await Promise.all([
+    const [rituals, approvedCheckIns, allCountedCheckIns, todayCheckIns] = await Promise.all([
       ritualRepository.findAll(),
       ritualCheckInRepository.findCountedApprovedByUser(userId),
+      ritualCheckInRepository.findCountedByUser(userId),
       ritualCheckInRepository.findCountedByUserAndDate(userId, getBrasiliaLocalDate()),
     ]);
 
@@ -83,6 +94,13 @@ export const ritualCheckInService = {
       todayStatusByRitual.set(c.ritualId, c.status);
     }
 
+    const checkInStatusesByRitual = new Map<string, typeof allCountedCheckIns>();
+    for (const c of allCountedCheckIns) {
+      const statuses = checkInStatusesByRitual.get(c.ritualId) ?? [];
+      statuses.push(c);
+      checkInStatusesByRitual.set(c.ritualId, statuses);
+    }
+
     // Participant counts
     const ritualIds = rituals.map((r) => r.id);
     const participantCounts = await ritualCheckInRepository.countParticipantsByRitualIds(ritualIds);
@@ -93,6 +111,8 @@ export const ritualCheckInService = {
       completedDays: approvedCountByRitual.get(r.id) ?? 0,
       todayStatus: todayStatusByRitual.get(r.id) ?? null,
       todayCheckedIn: todayStatusByRitual.has(r.id),
+      checkInStatuses: checkInStatusesByRitual.get(r.id) ?? [],
+      currentUserId: userId,
       participantCount: participantMap.get(r.id) ?? 0,
     }));
   },

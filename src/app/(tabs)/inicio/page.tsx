@@ -16,6 +16,7 @@ import { AnimatedList, AnimatedItem } from "@/components/animated-list";
 import { Users, Sparkles, Crown, Gem } from "lucide-react";
 import Link from "next/link";
 import { toPost, toEvent, toRitual, toRankingEntry, toMission } from "@/lib/transformers";
+import { fireMissionComplete, rememberApprovalStatuses } from "@/lib/celebration.service";
 import type { Post, CrownEvent, Ritual, RankingEntry, Mission } from "@/lib/types";
 import { useLayoutVersion } from "@/lib/layout-version";
 import { useIsDesktop } from "@/lib/use-media-query";
@@ -35,6 +36,7 @@ export default function InicioPage() {
 function InicioV1Page() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState("");
   const [userName, setUserName] = useState("");
   const [upcomingEvents, setUpcomingEvents] = useState<CrownEvent[]>([]);
   const [topPosts, setTopPosts] = useState<Post[]>([]);
@@ -58,9 +60,30 @@ function InicioV1Page() {
         setTopRankings((mural.rankingTop3 ?? []).map(toRankingEntry));
       }
 
+      let nextUserId = "";
+      if (meRes.ok) {
+        const me = await meRes.json();
+        nextUserId = me.id ?? "";
+        setUserId(nextUserId);
+        setUserName(me.name ?? "Rainha");
+      }
+
       if (missionsRes.ok) {
         const missionsData = await missionsRes.json();
-        setMissions(missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null)));
+        const nextMissions = missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null));
+        setMissions(nextMissions);
+
+        if (nextUserId) {
+          const approvedMissions = rememberApprovalStatuses(
+            `crown:mission-status:${nextUserId}`,
+            nextMissions
+              .filter((mission: Mission) => mission.submitted)
+              .map((mission: Mission) => ({ id: mission.id, status: mission.status }))
+          );
+          if (approvedMissions.length > 0) {
+            void fireMissionComplete();
+          }
+        }
       }
 
       if (ritualsRes.ok) {
@@ -68,10 +91,6 @@ function InicioV1Page() {
         setActiveRituals(ritualsData.map((r: Record<string, unknown>) => toRitual(r)));
       }
 
-      if (meRes.ok) {
-        const me = await meRes.json();
-        setUserName(me.name ?? "Rainha");
-      }
     } finally {
       setLoading(false);
     }
@@ -93,16 +112,29 @@ function InicioV1Page() {
         alert(err.error ?? "Erro ao concluir missão");
         return;
       }
+      const completion = await res.json();
+      if (completion.status === "APPROVED") {
+        void fireMissionComplete();
+      }
       // Refresh missions to reflect new status
       const missionsRes = await fetch("/api/missions");
       if (missionsRes.ok) {
         const missionsData = await missionsRes.json();
-        setMissions(missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null)));
+        const nextMissions = missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null));
+        setMissions(nextMissions);
+        if (userId) {
+          rememberApprovalStatuses(
+            `crown:mission-status:${userId}`,
+            nextMissions
+              .filter((mission: Mission) => mission.submitted)
+              .map((mission: Mission) => ({ id: mission.id, status: mission.status }))
+          );
+        }
       }
     } catch {
       alert("Erro ao concluir missão");
     }
-  }, []);
+  }, [userId]);
 
   const completedMissions = missions.filter((m) => m.status === "APPROVED").length;
   const totalMissions = missions.length;

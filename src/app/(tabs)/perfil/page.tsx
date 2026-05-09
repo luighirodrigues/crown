@@ -35,6 +35,7 @@ import {
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
 import { toRitual } from "@/lib/transformers";
+import { fireCrownConfetti, rememberTributeTotal } from "@/lib/celebration.service";
 import type { Ritual } from "@/lib/types";
 import { useLayoutVersion } from "@/lib/layout-version";
 
@@ -159,6 +160,18 @@ export default function PerfilPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    const milestone = rememberTributeTotal(
+      `crown:tribute-total:${profile.id}`,
+      profile.stats.totalTributos
+    );
+    if (milestone) {
+      void fireCrownConfetti();
+    }
+  }, [profile?.id, profile?.stats.totalTributos, profile]);
 
   function enterEditMode() {
     setDraftBio(profile?.profile?.bio ?? "");

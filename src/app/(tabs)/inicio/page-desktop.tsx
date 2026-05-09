@@ -14,6 +14,7 @@ import { Star, ChevronRight, ChevronLeft, Play } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toPost, toEvent, toRankingEntry, toMission } from "@/lib/transformers";
+import { fireMissionComplete, rememberApprovalStatuses } from "@/lib/celebration.service";
 import type { Post, CrownEvent, RankingEntry, Mission, Course } from "@/lib/types";
 
 interface Banner {
@@ -78,20 +79,13 @@ export default function InicioDesktopPage() {
         setBanners(mural.banners ?? []);
       }
 
-      if (missionsRes.ok) {
-        const missionsData = await missionsRes.json();
-        setMissions(
-          missionsData.map((m: Record<string, unknown>) =>
-            toMission(m, m.userCompletion as Record<string, unknown> | null)
-          )
-        );
-      }
-
+      let nextUserId = "";
       if (meRes.ok) {
         const me = await meRes.json();
+        nextUserId = me.id ?? "";
         setUserName(me.name ?? "Rainha");
         setUserAvatar(me.image ?? "");
-        setUserId(me.id ?? "");
+        setUserId(nextUserId);
         setUserSlug(me.slug ?? undefined);
         if (me.stats) {
           setUserStats({
@@ -99,6 +93,26 @@ export default function InicioDesktopPage() {
             presencaGeral: me.stats.presencaGeral ?? 0,
             rankPosition: me.stats.rankPosition ?? null,
           });
+        }
+      }
+
+      if (missionsRes.ok) {
+        const missionsData = await missionsRes.json();
+        const nextMissions = missionsData.map((m: Record<string, unknown>) =>
+          toMission(m, m.userCompletion as Record<string, unknown> | null)
+        );
+        setMissions(nextMissions);
+
+        if (nextUserId) {
+          const approvedMissions = rememberApprovalStatuses(
+            `crown:mission-status:${nextUserId}`,
+            nextMissions
+              .filter((mission: Mission) => mission.submitted)
+              .map((mission: Mission) => ({ id: mission.id, status: mission.status }))
+          );
+          if (approvedMissions.length > 0) {
+            void fireMissionComplete();
+          }
         }
       }
 
@@ -134,19 +148,30 @@ export default function InicioDesktopPage() {
         alert(err.error ?? "Erro ao concluir missão");
         return;
       }
+      const completion = await res.json();
+      if (completion.status === "APPROVED") {
+        void fireMissionComplete();
+      }
       const missionsRes = await fetch("/api/missions");
       if (missionsRes.ok) {
         const missionsData = await missionsRes.json();
-        setMissions(
-          missionsData.map((m: Record<string, unknown>) =>
-            toMission(m, m.userCompletion as Record<string, unknown> | null)
-          )
+        const nextMissions = missionsData.map((m: Record<string, unknown>) =>
+          toMission(m, m.userCompletion as Record<string, unknown> | null)
         );
+        setMissions(nextMissions);
+        if (userId) {
+          rememberApprovalStatuses(
+            `crown:mission-status:${userId}`,
+            nextMissions
+              .filter((mission: Mission) => mission.submitted)
+              .map((mission: Mission) => ({ id: mission.id, status: mission.status }))
+          );
+        }
       }
     } catch {
       alert("Erro ao concluir missão");
     }
-  }, []);
+  }, [userId]);
 
   const completedMissions = missions.filter((m) => m.status === "APPROVED").length;
   const totalMissions = missions.length;

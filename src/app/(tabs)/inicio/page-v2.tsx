@@ -29,6 +29,7 @@ import {
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toPost, toEvent, toRitual, toRankingEntry, toMission } from "@/lib/transformers";
+import { fireMissionComplete, rememberApprovalStatuses } from "@/lib/celebration.service";
 import type { Post, CrownEvent, Ritual, RankingEntry, Mission, Course } from "@/lib/types";
 
 interface Banner {
@@ -43,6 +44,7 @@ export default function InicioV2Page() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "MODERATOR";
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState("");
   const [userName, setUserName] = useState("");
   const [userAvatar, setUserAvatar] = useState("");
   const [topPosts, setTopPosts] = useState<Post[]>([]);
@@ -80,18 +82,11 @@ export default function InicioV2Page() {
         setBanners(mural.banners ?? []);
       }
 
-      if (missionsRes.ok) {
-        const missionsData = await missionsRes.json();
-        setMissions(missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null)));
-      }
-
-      if (ritualsRes.ok) {
-        const ritualsData = await ritualsRes.json();
-        setActiveRituals(ritualsData.map((r: Record<string, unknown>) => toRitual(r)));
-      }
-
+      let nextUserId = "";
       if (meRes.ok) {
         const me = await meRes.json();
+        nextUserId = me.id ?? "";
+        setUserId(nextUserId);
         setUserName(me.name ?? "Rainha");
         setUserAvatar(me.image ?? "");
         if (me.stats) {
@@ -104,6 +99,29 @@ export default function InicioV2Page() {
             rankPosition: me.stats.rankPosition ?? null,
           });
         }
+      }
+
+      if (missionsRes.ok) {
+        const missionsData = await missionsRes.json();
+        const nextMissions = missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null));
+        setMissions(nextMissions);
+
+        if (nextUserId) {
+          const approvedMissions = rememberApprovalStatuses(
+            `crown:mission-status:${nextUserId}`,
+            nextMissions
+              .filter((mission: Mission) => mission.submitted)
+              .map((mission: Mission) => ({ id: mission.id, status: mission.status }))
+          );
+          if (approvedMissions.length > 0) {
+            void fireMissionComplete();
+          }
+        }
+      }
+
+      if (ritualsRes.ok) {
+        const ritualsData = await ritualsRes.json();
+        setActiveRituals(ritualsData.map((r: Record<string, unknown>) => toRitual(r)));
       }
 
       if (coursesRes.ok) {
@@ -131,15 +149,28 @@ export default function InicioV2Page() {
         alert(err.error ?? "Erro ao concluir missão");
         return;
       }
+      const completion = await res.json();
+      if (completion.status === "APPROVED") {
+        void fireMissionComplete();
+      }
       const missionsRes = await fetch("/api/missions");
       if (missionsRes.ok) {
         const missionsData = await missionsRes.json();
-        setMissions(missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null)));
+        const nextMissions = missionsData.map((m: Record<string, unknown>) => toMission(m, m.userCompletion as Record<string, unknown> | null));
+        setMissions(nextMissions);
+        if (userId) {
+          rememberApprovalStatuses(
+            `crown:mission-status:${userId}`,
+            nextMissions
+              .filter((mission: Mission) => mission.submitted)
+              .map((mission: Mission) => ({ id: mission.id, status: mission.status }))
+          );
+        }
       }
     } catch {
       alert("Erro ao concluir missão");
     }
-  }, []);
+  }, [userId]);
 
   const completedMissions = missions.filter((m) => m.status === "APPROVED").length;
   const totalMissions = missions.length;

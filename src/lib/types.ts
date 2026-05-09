@@ -89,6 +89,9 @@ export interface Ritual {
   autoApprove: boolean;
   participantCount: number;
   todayCheckedIn: boolean;
+  todayStatus?: ApprovalStatus | null;
+  checkInStatuses?: Array<{ id: string; status: ApprovalStatus }>;
+  currentUserId?: string;
 }
 
 export interface Mission {

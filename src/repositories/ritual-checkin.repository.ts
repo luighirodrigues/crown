@@ -128,6 +128,14 @@ export const ritualCheckInRepository = {
     });
   },
 
+  /** Get all counted check-in statuses for approval transition detection */
+  findCountedByUser(userId: string) {
+    return prisma.ritualCheckIn.findMany({
+      where: { userId, isCounted: true },
+      select: { id: true, ritualId: true, status: true },
+    });
+  },
+
   /** Get today's counted check-in status for a user across specified rituals */
   findCountedByUserAndDate(userId: string, localDate: string) {
     return prisma.ritualCheckIn.findMany({

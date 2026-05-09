@@ -9,6 +9,7 @@ import { AnimatedList, AnimatedItem } from "@/components/animated-list";
 import { Trophy, Flame, Gem, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toRitual } from "@/lib/transformers";
+import { fireCrownConfetti, rememberApprovalStatuses } from "@/lib/celebration.service";
 import type { Ritual } from "@/lib/types";
 
 export default function RituaisDesktopPage() {
@@ -26,7 +27,19 @@ export default function RituaisDesktopPage() {
       const res = await fetch("/api/rituals");
       if (res.ok) {
         const data = await res.json();
-        setRituals(data.map((r: Record<string, unknown>) => toRitual(r)));
+        const nextRituals = data.map((r: Record<string, unknown>) => toRitual(r));
+        setRituals(nextRituals);
+
+        const currentUserId = nextRituals.find((ritual: Ritual) => ritual.currentUserId)?.currentUserId;
+        const approvedRituals = rememberApprovalStatuses(
+          `crown:ritual-checkin-status:${currentUserId ?? "anonymous"}`,
+          nextRituals
+            .flatMap((ritual: Ritual) => ritual.checkInStatuses ?? [])
+            .map((checkIn: { id: string; status: string }) => ({ id: checkIn.id, status: checkIn.status }))
+        );
+        if (approvedRituals.length > 0) {
+          void fireCrownConfetti();
+        }
       }
     } finally {
       setLoading(false);
@@ -60,6 +73,9 @@ export default function RituaisDesktopPage() {
             ? "Check-in realizado com sucesso!"
             : "Check-in enviado! Aguardando aprovação.";
         setSuccessMessage(msg);
+        if (data.status === "APPROVED") {
+          void fireCrownConfetti();
+        }
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
         const err = await res.json();

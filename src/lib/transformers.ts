@@ -93,6 +93,9 @@ export function toRitual(raw: AnyRecord, userCheckIns?: AnyRecord[]): Ritual {
     autoApprove: raw.autoApprove ?? true,
     participantCount: raw.participantCount ?? 0,
     todayCheckedIn: raw.todayCheckedIn ?? false,
+    todayStatus: raw.todayStatus ?? null,
+    checkInStatuses: raw.checkInStatuses ?? [],
+    currentUserId: raw.currentUserId ?? undefined,
   };
 }
 
