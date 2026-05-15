@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["nodemailer"],
+  serverExternalPackages: ["nodemailer", "web-push"],
+  turbopack: {
+    root: process.cwd(),
+  },
 };
 
 export default nextConfig;

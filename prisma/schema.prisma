@@ -41,6 +41,14 @@ enum NotificationType {
   SYSTEM
 }
 
+enum AdminNotificationBroadcastStatus {
+  PROCESSING
+  PUSH_PENDING
+  COMPLETED
+  COMPLETED_WITH_PUSH_ERRORS
+  FAILED
+}
+
 enum PresenceType {
   GENERAL
   ROUTINE
@@ -110,24 +118,26 @@ model User {
   sessions Session[]
 
   // Domain relations
-  profile            Profile?
-  posts              Post[]
-  comments           Comment[]
-  likes              Like[]
-  ritualCheckIns     RitualCheckIn[]
-  missionCompletions MissionCompletion[]
-  courseProgress     CourseProgress[]
-  notifications      Notification[]
-  pointsLedger       PointsLedger[]
-  presenceLedger     PresenceLedger[]
-  feedbacks          Feedback[]
+  profile                     Profile?
+  posts                       Post[]
+  comments                    Comment[]
+  likes                       Like[]
+  ritualCheckIns              RitualCheckIn[]
+  missionCompletions          MissionCompletion[]
+  courseProgress              CourseProgress[]
+  notifications               Notification[]
+  pointsLedger                PointsLedger[]
+  presenceLedger              PresenceLedger[]
+  feedbacks                   Feedback[]
+  pushSubscriptions           PushSubscription[]
+  adminNotificationBroadcasts AdminNotificationBroadcast[]
 }
 
 model Profile {
-  id                 String   @id @default(cuid())
-  userId             String   @unique
+  id                 String    @id @default(cuid())
+  userId             String    @unique
   bannerUrl          String?
-  bio                String?  @db.Text
+  bio                String?   @db.Text
   displayName        String?
   profession         String?
   birthday           DateTime?
@@ -136,11 +146,11 @@ model Profile {
   instagram          String?
   externalLink       String?
   phone              String?
-  interests          String[] @default([])
-  skills             String[] @default([])
-  onboardingComplete Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  interests          String[]  @default([])
+  skills             String[]  @default([])
+  onboardingComplete Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -233,7 +243,7 @@ model RitualCheckIn {
   userId           String
   text             String?        @db.Text
   imageUrl         String?
-  localDate        String         // YYYY-MM-DD in America/Sao_Paulo
+  localDate        String // YYYY-MM-DD in America/Sao_Paulo
   isCounted        Boolean        @default(false)
   status           ApprovalStatus @default(PENDING)
   reviewedByUserId String?
@@ -360,12 +370,49 @@ model Notification {
   type      NotificationType
   title     String
   body      String           @db.Text
+  linkUrl   String?          @db.Text
   read      Boolean          @default(false)
   createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+model PushSubscription {
+  id             String    @id @default(cuid())
+  userId         String
+  endpoint       String    @unique @db.VarChar(2048)
+  p256dh         String    @db.Text
+  auth           String    @db.Text
+  userAgent      String?   @db.Text
+  expirationTime DateTime?
+  lastSeenAt     DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastSeenAt])
+}
+
+model AdminNotificationBroadcast {
+  id               String   @id @default(cuid())
+  createdByUserId  String
+  idempotencyKey   String   @unique
+  title            String
+  body             String   @db.Text
+  linkUrl          String?  @db.Text
+  status           AdminNotificationBroadcastStatus
+  targetCount      Int      @default(0)
+  inAppCount       Int      @default(0)
+  pushAttemptCount Int      @default(0)
+  pushFailureCount Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy User @relation(fields: [createdByUserId], references: [id])
 }
 
 // ─── Points & Presence Engine (scaffold) ────────────────
@@ -385,7 +432,7 @@ model PointsLedger {
   userId     String
   ruleKey    String
   points     Int
-  sourceType String   // e.g. "post", "comment", "ritual_checkin", "mission"
+  sourceType String // e.g. "post", "comment", "ritual_checkin", "mission"
   sourceId   String
   createdAt  DateTime @default(now())
 
@@ -413,15 +460,15 @@ model PresenceLedger {
 // ─── Webhook (scaffold) ─────────────────────────────────
 
 model WebhookEventLog {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   provider       String
   eventId        String
-  receivedAt     DateTime @default(now())
+  receivedAt     DateTime  @default(now())
   payloadJson    Json
   signatureValid Boolean
   processedAt    DateTime?
-  status         String   @default("received")
-  createdAt      DateTime @default(now())
+  status         String    @default("received")
+  createdAt      DateTime  @default(now())
 
   @@unique([provider, eventId])
 }
@@ -431,7 +478,7 @@ model WebhookEventLog {
 model Feedback {
   id          String         @id @default(cuid())
   userId      String
-  type        String         // ideia, bug, outro
+  type        String // ideia, bug, outro
   message     String         @db.Text
   imageUrl    String?
   isAnonymous Boolean        @default(false)

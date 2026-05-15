@@ -38,7 +38,18 @@ export const notificationRepository = {
     type: "LIKE" | "COMMENT" | "REPLY" | "APPROVAL" | "EVENT" | "SYSTEM";
     title: string;
     body: string;
+    linkUrl?: string | null;
   }) {
     return prisma.notification.create({ data });
+  },
+
+  createMany(input: { data: Array<{
+    userId: string;
+    type: "LIKE" | "COMMENT" | "REPLY" | "APPROVAL" | "EVENT" | "SYSTEM";
+    title: string;
+    body: string;
+    linkUrl?: string | null;
+  }> }) {
+    return prisma.notification.createMany(input);
   },
 };

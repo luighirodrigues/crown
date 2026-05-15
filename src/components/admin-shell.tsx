@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, Shield } from "lucide-react";
+import type { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
 
 const adminNav = [
@@ -13,14 +14,16 @@ const adminNav = [
   { href: "/admin/channels", label: "Canais" },
   { href: "/admin/rituals", label: "Rituais" },
   { href: "/admin/events", label: "Eventos" },
+  { href: "/admin/notifications", label: "Notificações", adminOnly: true },
   { href: "/admin/courses", label: "Cursos" },
   { href: "/admin/missions", label: "Missões" },
   { href: "/admin/banners", label: "Banners" },
   { href: "/admin/feedbacks", label: "Feedbacks" },
 ];
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({ children, role }: { children: React.ReactNode; role?: Role }) {
   const pathname = usePathname();
+  const visibleNav = adminNav.filter((item) => !item.adminOnly || role === "ADMIN");
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -38,7 +41,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       {/* Admin Navigation */}
       <nav className="bg-surface border-b border-muted/30 px-4 py-2 overflow-x-auto scrollbar-hide">
         <div className="flex gap-2 min-w-max">
-          {adminNav.map((item) => (
+          {visibleNav.map((item) => (
             <Link
               key={item.href}
               href={item.href}

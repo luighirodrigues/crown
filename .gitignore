@@ -42,3 +42,6 @@ yarn-error.log*
 # uploads
 /uploads
 next-env.d.ts
+
+# local git worktrees
+/.worktree/
