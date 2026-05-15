@@ -11,6 +11,11 @@ type PushSupportInput = {
   hasNotification: boolean;
 };
 
+type PwaInstallInput = {
+  hasStandaloneDisplayMode: boolean;
+  hasNavigatorStandalone: boolean;
+};
+
 export function getPushSupportState(input: PushSupportInput): PushSupportState {
   if (!input.isSecureContext) {
     return { supported: false, reason: "insecure" };
@@ -21,4 +26,8 @@ export function getPushSupportState(input: PushSupportInput): PushSupportState {
   }
 
   return { supported: true, reason: null };
+}
+
+export function getPwaInstallState(input: PwaInstallInput) {
+  return { installed: input.hasStandaloneDisplayMode || input.hasNavigatorStandalone };
 }

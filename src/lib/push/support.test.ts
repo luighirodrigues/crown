@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPushSupportState } from "./support";
+import { getPwaInstallState, getPushSupportState } from "./support";
 
 describe("getPushSupportState", () => {
   it("reports insecure origins before checking browser APIs", () => {
@@ -33,5 +33,34 @@ describe("getPushSupportState", () => {
         hasNotification: true,
       })
     ).toEqual({ supported: true, reason: null });
+  });
+});
+
+describe("getPwaInstallState", () => {
+  it("reports installed when display-mode standalone is active", () => {
+    expect(
+      getPwaInstallState({
+        hasStandaloneDisplayMode: true,
+        hasNavigatorStandalone: false,
+      })
+    ).toEqual({ installed: true });
+  });
+
+  it("reports installed for iOS navigator standalone", () => {
+    expect(
+      getPwaInstallState({
+        hasStandaloneDisplayMode: false,
+        hasNavigatorStandalone: true,
+      })
+    ).toEqual({ installed: true });
+  });
+
+  it("reports not installed in a regular browser tab", () => {
+    expect(
+      getPwaInstallState({
+        hasStandaloneDisplayMode: false,
+        hasNavigatorStandalone: false,
+      })
+    ).toEqual({ installed: false });
   });
 });

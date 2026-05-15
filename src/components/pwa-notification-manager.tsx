@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Loader2 } from "lucide-react";
+import { BellOff, Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import { getPushSupportState, type PushSupportReason } from "@/lib/push/support";
+import { getPwaInstallState, getPushSupportState, type PushSupportReason } from "@/lib/push/support";
 
 type PushStatus = "checking" | "unsupported" | "insecure" | "idle" | "enabled" | "blocked" | "disabled" | "error";
 
@@ -36,6 +36,17 @@ function getBrowserPushSupport() {
     hasServiceWorker: "serviceWorker" in navigator,
     hasPushManager: "PushManager" in window,
     hasNotification: "Notification" in window,
+  });
+}
+
+function getBrowserPwaInstallState() {
+  if (typeof window === "undefined") {
+    return { installed: false };
+  }
+
+  return getPwaInstallState({
+    hasStandaloneDisplayMode: window.matchMedia("(display-mode: standalone)").matches,
+    hasNavigatorStandalone: Boolean((navigator as Navigator & { standalone?: boolean }).standalone),
   });
 }
 
@@ -78,19 +89,6 @@ async function postSubscription(subscription: PushSubscription) {
   }
 }
 
-async function deleteSubscription(endpoint: string) {
-  const response = await fetch("/api/push/subscriptions", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ endpoint }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to delete push subscription");
-  }
-}
-
 async function consumeResubscribeFlag() {
   if (!("caches" in window)) {
     return false;
@@ -117,9 +115,21 @@ export function PwaNotificationManager() {
   const [status, setStatus] = useState<PushStatus>("checking");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [installChecked, setInstallChecked] = useState(false);
+  const [isInstalledApp, setIsInstalledApp] = useState(false);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") {
+      setInstallChecked(false);
+      setIsInstalledApp(false);
+      return;
+    }
+
+    const installState = getBrowserPwaInstallState();
+    setInstallChecked(true);
+    setIsInstalledApp(installState.installed);
+
+    if (!installState.installed) {
       return;
     }
 
@@ -189,7 +199,7 @@ export function PwaNotificationManager() {
     };
   }, [sessionStatus]);
 
-  if (sessionStatus !== "authenticated") {
+  if (sessionStatus !== "authenticated" || !installChecked || !isInstalledApp || status === "enabled") {
     return null;
   }
 
@@ -257,37 +267,8 @@ export function PwaNotificationManager() {
     }
   }
 
-  async function disableNotifications() {
-    if (busy || !getBrowserPushSupport().supported) {
-      return;
-    }
-
-    setBusy(true);
-    setMessage(null);
-
-    try {
-      const registration = await getRegistration();
-      const subscription = await registration.pushManager.getSubscription();
-
-      if (subscription) {
-        await deleteSubscription(subscription.endpoint);
-        await subscription.unsubscribe();
-      }
-
-      setStatus("idle");
-      setMessage("Notificacoes desativadas neste dispositivo.");
-    } catch {
-      setStatus("error");
-      setMessage("Nao foi possivel desativar notificacoes agora.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const isEnabled = status === "enabled";
   const isBlocked = status === "blocked";
-  const canEnable = !busy && !isEnabled && !isBlocked && status !== "checking";
-  const canDisable = !busy && isEnabled;
+  const canEnable = !busy && !isBlocked && status !== "checking";
   const isPrompt = status === "idle";
 
   return (
@@ -310,13 +291,11 @@ export function PwaNotificationManager() {
           <div
             className={cn(
               "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-              isEnabled ? "bg-gold-500/20 text-gold-600" : "bg-muted/20 text-text-secondary"
+              "bg-muted/20 text-text-secondary"
             )}
           >
             {busy || status === "checking" ? (
               <Loader2 size={17} className="animate-spin" />
-            ) : isEnabled ? (
-              <Bell size={17} />
             ) : (
               <BellOff size={17} />
             )}
@@ -340,15 +319,6 @@ export function PwaNotificationManager() {
             </button>
           )}
 
-          {canDisable && (
-            <button
-              type="button"
-              onClick={disableNotifications}
-              className="shrink-0 rounded-full bg-muted/20 px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-muted/30"
-            >
-              Desativar
-            </button>
-          )}
         </div>
       </div>
     </div>
