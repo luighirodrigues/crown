@@ -51,6 +51,10 @@ function normalizeUrlOrThrow(value: string, appOrigin?: string) {
     throw new InvalidNotificationUrlError("Notification URL is required");
   }
 
+  if (/[\t\n\r]/.test(trimmed)) {
+    throw new InvalidNotificationUrlError();
+  }
+
   if (trimmed.startsWith("/") || trimmed.startsWith("\\")) {
     if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("\\")) {
       throw new InvalidNotificationUrlError();

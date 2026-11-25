@@ -22,9 +22,9 @@ export default function OfflinePage() {
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-900/10 text-brand-900">
               <WifiOff size={26} aria-hidden="true" />
             </div>
-            <h2 className="text-xl font-semibold text-text-primary">Voce esta offline</h2>
+            <h2 className="text-xl font-semibold text-text-primary">Você está offline</h2>
             <p className="mt-3 text-sm leading-6 text-text-secondary">
-              A comunidade CROWN precisa de conexao para carregar conteudos atualizados. Confira sua internet e tente novamente.
+              A comunidade CROWN precisa de conexão para carregar conteúdos atualizados. Confira sua internet e tente novamente.
             </p>
           </div>
 

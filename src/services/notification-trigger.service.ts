@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendToUser, sendToUsers, type PushPayload } from "./push.service";
 
 const DEFAULT_NOTIFICATION_URL = "/inicio";
+const COMMUNITY_NOTIFICATION_URL = "/comunidade";
 
 function logPushFailure(error: unknown) {
   console.error("Notification push delivery failed", error);
@@ -49,13 +50,13 @@ export const notificationTriggerService = {
       type: "COMMENT",
       title,
       body,
-      linkUrl: DEFAULT_NOTIFICATION_URL,
+      linkUrl: COMMUNITY_NOTIFICATION_URL,
     });
 
     await sendPushToUser(postAuthorId, {
       title,
-      body,
-      url: DEFAULT_NOTIFICATION_URL,
+      body: "Você recebeu um comentário em uma publicação.",
+      url: COMMUNITY_NOTIFICATION_URL,
       notificationId: notification.id,
     });
 
@@ -71,13 +72,13 @@ export const notificationTriggerService = {
       type: "REPLY",
       title,
       body,
-      linkUrl: DEFAULT_NOTIFICATION_URL,
+      linkUrl: COMMUNITY_NOTIFICATION_URL,
     });
 
     await sendPushToUser(parentAuthorId, {
       title,
-      body,
-      url: DEFAULT_NOTIFICATION_URL,
+      body: "Você recebeu uma resposta a um comentário.",
+      url: COMMUNITY_NOTIFICATION_URL,
       notificationId: notification.id,
     });
 
@@ -95,21 +96,23 @@ export const notificationTriggerService = {
     const title = isApproved
       ? `${itemType} aprovado(a)`
       : `${itemType} reprovado(a)`;
-    const body = isApproved
+    const pushBody = isApproved
       ? `Seu ${itemType} foi aprovado! Tributos e presenças foram contabilizados.`
-      : `Seu ${itemType} foi reprovado.${reviewNote ? ` Motivo: ${reviewNote}` : ""}`;
+      : `Seu ${itemType} foi reprovado.`;
+    const body = !isApproved && reviewNote ? `${pushBody} Motivo: ${reviewNote}` : pushBody;
+    const linkUrl = itemType.toLowerCase() === "check-in" ? "/rituais" : DEFAULT_NOTIFICATION_URL;
     const notification = await notificationRepository.create({
       userId,
       type: "APPROVAL",
       title,
       body,
-      linkUrl: DEFAULT_NOTIFICATION_URL,
+      linkUrl,
     });
 
     await sendPushToUser(userId, {
       title,
-      body,
-      url: DEFAULT_NOTIFICATION_URL,
+      body: pushBody,
+      url: linkUrl,
       notificationId: notification.id,
     });
 

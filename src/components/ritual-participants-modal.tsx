@@ -30,16 +30,34 @@ interface RitualParticipantsModalProps {
 }
 
 export function RitualParticipantsModal({ ritualId, open, onClose }: RitualParticipantsModalProps) {
-  const [data, setData] = useState<ParticipantsData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [request, setRequest] = useState<{
+    ritualId: string;
+    open: boolean;
+    data?: ParticipantsData | null;
+  }>({ ritualId, open });
+
+  if (request.ritualId !== ritualId || request.open !== open) {
+    setRequest({ ritualId, open });
+  }
+
+  const { data } = request;
+  const loading = data === undefined;
 
   useEffect(() => {
     if (!open) return;
-    setLoading(true);
-    fetch(`/api/rituals/${ritualId}/participants`)
+    const controller = new AbortController();
+
+    function finish(data: ParticipantsData | null) {
+      if (!controller.signal.aborted) {
+        setRequest({ ritualId, open, data });
+      }
+    }
+
+    fetch(`/api/rituals/${ritualId}/participants`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
-      .then((d) => setData(d))
-      .finally(() => setLoading(false));
+      .then(finish, () => finish(null));
+
+    return () => controller.abort();
   }, [open, ritualId]);
 
   // Lock body scroll when modal is open

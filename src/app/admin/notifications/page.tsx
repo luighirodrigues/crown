@@ -14,5 +14,5 @@ export default async function AdminNotificationsPage() {
     redirect("/admin/approvals");
   }
 
-  return <AdminNotificationsForm />;
+  return <AdminNotificationsForm userId={session.user.id} />;
 }

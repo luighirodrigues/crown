@@ -8,40 +8,58 @@ type PushSubscriptionInput = {
   expirationTime?: Date | null;
 };
 
+export class PushSubscriptionConflictError extends Error {
+  constructor() {
+    super("Push subscription endpoint is already registered to another user");
+    this.name = "PushSubscriptionConflictError";
+  }
+}
+
 export const pushSubscriptionRepository = {
   async upsertForUser(userId: string, data: PushSubscriptionInput) {
-    const existing = await prisma.pushSubscription.findUnique({
-      where: { endpoint: data.endpoint },
-      select: { userId: true, p256dh: true, auth: true },
+    const values = {
+      userId,
+      p256dh: data.p256dh,
+      auth: data.auth,
+      userAgent: data.userAgent ?? null,
+      expirationTime: data.expirationTime ?? null,
+      lastSeenAt: new Date(),
+    };
+    const updateOwnedOrMatching = () => prisma.pushSubscription.updateMany({
+      where: {
+        endpoint: data.endpoint,
+        OR: [{ userId }, { p256dh: data.p256dh, auth: data.auth }],
+      },
+      data: values,
     });
 
-    if (
-      existing &&
-      existing.userId !== userId &&
-      (existing.p256dh !== data.p256dh || existing.auth !== data.auth)
-    ) {
-      throw new Error("Push subscription endpoint is already registered to another user");
+    if ((await updateOwnedOrMatching()).count > 0) {
+      return;
     }
 
-    return prisma.pushSubscription.upsert({
-      where: { endpoint: data.endpoint },
-      update: {
+    try {
+      await prisma.pushSubscription.create({ data: { ...values, endpoint: data.endpoint } });
+    } catch (error) {
+      if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "P2002") {
+        throw error;
+      }
+
+      if ((await updateOwnedOrMatching()).count === 0) {
+        throw new PushSubscriptionConflictError();
+      }
+    }
+  },
+
+  async hasActiveEndpoint(userId: string, endpoint: string) {
+    const subscription = await prisma.pushSubscription.findUnique({
+      where: {
+        endpoint,
         userId,
-        p256dh: data.p256dh,
-        auth: data.auth,
-        userAgent: data.userAgent ?? null,
-        expirationTime: data.expirationTime ?? null,
-        lastSeenAt: new Date(),
+        OR: [{ expirationTime: null }, { expirationTime: { gt: new Date() } }],
       },
-      create: {
-        userId,
-        endpoint: data.endpoint,
-        p256dh: data.p256dh,
-        auth: data.auth,
-        userAgent: data.userAgent ?? null,
-        expirationTime: data.expirationTime ?? null,
-      },
+      select: { id: true },
     });
+    return subscription !== null;
   },
 
   deleteForUser(userId: string, endpoint: string) {

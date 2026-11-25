@@ -4,7 +4,8 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     pushSubscription: {
       findUnique: vi.fn(),
-      upsert: vi.fn(),
+      updateMany: vi.fn(),
+      create: vi.fn(),
       deleteMany: vi.fn(),
       findMany: vi.fn(),
     },
@@ -30,12 +31,11 @@ const subscriptionRecord = {
 
 describe("pushSubscriptionRepository", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("upserts a subscription by endpoint for the same user", async () => {
-    pushSubscription.findUnique.mockResolvedValue(subscriptionRecord);
-    pushSubscription.upsert.mockResolvedValue(subscriptionRecord);
+    pushSubscription.updateMany.mockResolvedValue({ count: 1 });
 
     await pushSubscriptionRepository.upsertForUser("user-1", {
       endpoint: "https://push.example/subscription",
@@ -45,13 +45,12 @@ describe("pushSubscriptionRepository", () => {
       expirationTime: new Date("2026-06-01T00:00:00.000Z"),
     });
 
-    expect(pushSubscription.findUnique).toHaveBeenCalledWith({
-      where: { endpoint: "https://push.example/subscription" },
-      select: { userId: true, p256dh: true, auth: true },
-    });
-    expect(pushSubscription.upsert).toHaveBeenCalledWith({
-      where: { endpoint: "https://push.example/subscription" },
-      update: {
+    expect(pushSubscription.updateMany).toHaveBeenCalledWith({
+      where: {
+        endpoint: "https://push.example/subscription",
+        OR: [{ userId: "user-1" }, { p256dh: "p256dh-key", auth: "auth-secret" }],
+      },
+      data: {
         userId: "user-1",
         p256dh: "p256dh-key",
         auth: "auth-secret",
@@ -59,23 +58,13 @@ describe("pushSubscriptionRepository", () => {
         expirationTime: new Date("2026-06-01T00:00:00.000Z"),
         lastSeenAt: expect.any(Date),
       },
-      create: {
-        userId: "user-1",
-        endpoint: "https://push.example/subscription",
-        p256dh: "p256dh-key",
-        auth: "auth-secret",
-        userAgent: "Firefox",
-        expirationTime: new Date("2026-06-01T00:00:00.000Z"),
-      },
     });
+    expect(pushSubscription.create).not.toHaveBeenCalled();
   });
 
   it("allows transferring an endpoint to another user when submitted keys match", async () => {
-    pushSubscription.findUnique.mockResolvedValue({
-      ...subscriptionRecord,
-      userId: "user-previous",
-    });
-    pushSubscription.upsert.mockResolvedValue({ ...subscriptionRecord, userId: "user-current" });
+    pushSubscription.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    pushSubscription.create.mockRejectedValue({ code: "P2002" });
 
     await pushSubscriptionRepository.upsertForUser("user-current", {
       endpoint: "https://push.example/subscription",
@@ -83,20 +72,19 @@ describe("pushSubscriptionRepository", () => {
       auth: "auth-secret",
     });
 
-    expect(pushSubscription.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({ userId: "user-current" }),
-      })
-    );
+    expect(pushSubscription.updateMany).toHaveBeenCalledTimes(2);
+    expect(pushSubscription.updateMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: {
+        endpoint: "https://push.example/subscription",
+        OR: [{ userId: "user-current" }, { p256dh: "p256dh-key", auth: "auth-secret" }],
+      },
+      data: expect.objectContaining({ userId: "user-current" }),
+    }));
   });
 
   it("rejects transferring an endpoint to another user when submitted keys differ", async () => {
-    pushSubscription.findUnique.mockResolvedValue({
-      ...subscriptionRecord,
-      userId: "user-previous",
-      p256dh: "previous-p256dh-key",
-      auth: "previous-auth-secret",
-    });
+    pushSubscription.updateMany.mockResolvedValue({ count: 0 });
+    pushSubscription.create.mockRejectedValue({ code: "P2002" });
 
     await expect(
       pushSubscriptionRepository.upsertForUser("user-current", {
@@ -106,7 +94,32 @@ describe("pushSubscriptionRepository", () => {
       })
     ).rejects.toThrow("Push subscription endpoint is already registered to another user");
 
-    expect(pushSubscription.upsert).not.toHaveBeenCalled();
+    expect(pushSubscription.updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates a new endpoint when no existing row can be updated", async () => {
+    pushSubscription.updateMany.mockResolvedValue({ count: 0 });
+    pushSubscription.create.mockResolvedValue(subscriptionRecord);
+
+    await pushSubscriptionRepository.upsertForUser("user-1", subscriptionRecord);
+
+    expect(pushSubscription.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ endpoint: subscriptionRecord.endpoint, userId: "user-1" }),
+    });
+  });
+
+  it("checks status for the current user and ignores expired subscriptions", async () => {
+    pushSubscription.findUnique.mockResolvedValue(null);
+
+    await expect(pushSubscriptionRepository.hasActiveEndpoint("user-1", subscriptionRecord.endpoint)).resolves.toBe(false);
+    expect(pushSubscription.findUnique).toHaveBeenCalledWith({
+      where: {
+        endpoint: subscriptionRecord.endpoint,
+        userId: "user-1",
+        OR: [{ expirationTime: null }, { expirationTime: { gt: expect.any(Date) } }],
+      },
+      select: { id: true },
+    });
   });
 
   it("deletes only the subscription matching both endpoint and user", async () => {

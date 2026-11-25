@@ -1,324 +1,373 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BellOff, Loader2 } from "lucide-react";
+import { Bell, BellOff, Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import { getPwaInstallState, getPushSupportState, type PushSupportReason } from "@/lib/push/support";
+import { getPwaInstallState, getPushSupportState } from "@/lib/push/support";
 
-type PushStatus = "checking" | "unsupported" | "insecure" | "idle" | "enabled" | "blocked" | "disabled" | "error";
+type PushStatus = "checking" | "install" | "unsupported" | "insecure" | "idle" | "enabled" | "blocked" | "disabled" | "error";
 
-type VapidPublicKeyResponse =
-  | { publicKey: string; enabled?: true }
-  | { enabled: false; publicKey: null; message: string; missing?: string[] };
+type PushState = {
+  status: PushStatus;
+  message?: string;
+  registration?: ServiceWorkerRegistration;
+  publicKey?: string;
+};
 
 const statusLabels: Record<PushStatus, string> = {
-  checking: "Verificando notificacoes",
-  unsupported: "Notificacoes indisponiveis neste navegador",
-  insecure: "Notificacoes exigem HTTPS",
-  idle: "Ative notificacoes neste dispositivo",
-  enabled: "Notificacoes ativas neste dispositivo",
-  blocked: "Notificacoes bloqueadas pelo navegador",
-  disabled: "Notificacoes push desativadas no servidor",
-  error: "Nao foi possivel configurar notificacoes",
+  checking: "Verificando notificações",
+  install: "Instale a CROWN para receber notificações",
+  unsupported: "Notificações indisponíveis neste navegador",
+  insecure: "Notificações exigem HTTPS",
+  idle: "Ative notificações neste dispositivo",
+  enabled: "Notificações ativas neste dispositivo",
+  blocked: "Notificações bloqueadas pelo navegador",
+  disabled: "Notificações push desativadas no servidor",
+  error: "Não foi possível configurar notificações",
 };
 
 const RESUBSCRIBE_STATE_CACHE = "crown-pwa-state-v1";
 const RESUBSCRIBE_FLAG_URL = "/__crown_sw_state__/push-resubscribe-needed";
-
-function getBrowserPushSupport() {
-  if (typeof window === "undefined") {
-    return { supported: false, reason: "unsupported" as const };
-  }
-
-  return getPushSupportState({
-    isSecureContext: window.isSecureContext,
-    hasServiceWorker: "serviceWorker" in navigator,
-    hasPushManager: "PushManager" in window,
-    hasNotification: "Notification" in window,
-  });
-}
-
-function getBrowserPwaInstallState() {
-  if (typeof window === "undefined") {
-    return { installed: false };
-  }
-
-  return getPwaInstallState({
-    hasStandaloneDisplayMode: window.matchMedia("(display-mode: standalone)").matches,
-    hasNavigatorStandalone: Boolean((navigator as Navigator & { standalone?: boolean }).standalone),
-  });
-}
-
-function getUnsupportedMessage(reason: PushSupportReason) {
-  if (reason === "insecure") {
-    return "Abra o PWA pelo dominio HTTPS de producao. Em HTTP no telefone, o navegador bloqueia notificacoes push.";
-  }
-
-  return "Este navegador ainda nao permite notificacoes push para PWA. No iPhone, instale o app na Tela de Inicio e abra por la.";
-}
+const RENEW_MESSAGE = "Sua assinatura mudou. Ative novamente para continuar recebendo avisos.";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; i += 1) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-
-  return outputArray;
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(window.atob(base64), (character) => character.charCodeAt(0));
 }
 
-async function getRegistration() {
-  const existing = await navigator.serviceWorker.getRegistration("/");
-  return existing ?? navigator.serviceWorker.register("/sw.js", { scope: "/" });
-}
-
-async function postSubscription(subscription: PushSubscription) {
-  const response = await fetch("/api/push/subscriptions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify(subscription.toJSON()),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to save push subscription");
-  }
-}
-
-async function consumeResubscribeFlag() {
-  if (!("caches" in window)) {
-    return false;
+function waitForActiveWorker(registration: ServiceWorkerRegistration) {
+  if (registration.active) {
+    return Promise.resolve(registration);
   }
 
-  try {
-    const cache = await caches.open(RESUBSCRIBE_STATE_CACHE);
-    const request = new Request(RESUBSCRIBE_FLAG_URL);
-    const response = await cache.match(request);
+  const worker = registration.installing ?? registration.waiting;
+  if (!worker) {
+    return Promise.reject(new Error("No service worker available"));
+  }
 
-    if (!response) {
-      return false;
+  return new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+    function checkWorker() {
+      if (worker?.state === "activated" || registration.active) {
+        worker?.removeEventListener("statechange", checkWorker);
+        resolve(registration);
+      } else if (worker?.state === "redundant") {
+        worker.removeEventListener("statechange", checkWorker);
+        reject(new Error("Service worker did not activate"));
+      }
     }
 
-    await cache.delete(request);
-    return true;
+    worker.addEventListener("statechange", checkWorker);
+    checkWorker();
+  });
+}
+
+async function readResubscribeFlag() {
+  try {
+    const cache = await caches.open(RESUBSCRIBE_STATE_CACHE);
+    return Boolean(await cache.match(RESUBSCRIBE_FLAG_URL));
   } catch {
     return false;
   }
 }
 
+async function clearResubscribeFlag() {
+  try {
+    const cache = await caches.open(RESUBSCRIBE_STATE_CACHE);
+    await cache.delete(RESUBSCRIBE_FLAG_URL);
+  } catch {
+    // Cache access is optional. The server still holds the subscription state.
+  }
+}
+
+async function getOwnedSubscription(subscription: PushSubscription, signal: AbortSignal) {
+  const response = await fetch("/api/push/subscriptions", {
+    cache: "no-store",
+    headers: { "X-Crown-Push-Endpoint": subscription.endpoint },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error("Failed to verify push subscription");
+  }
+
+  const data: { enabled: boolean } = await response.json();
+  return data.enabled;
+}
+
+async function getVapidKey(signal: AbortSignal) {
+  const response = await fetch("/api/push/vapid-public-key", { cache: "no-store", signal });
+  if (!response.ok) {
+    throw new Error("Failed to load the VAPID public key");
+  }
+
+  const data: { publicKey: string | null } = await response.json();
+  return data.publicKey;
+}
+
 export function PwaNotificationManager() {
-  const { status: sessionStatus } = useSession();
-  const [status, setStatus] = useState<PushStatus>("checking");
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [installChecked, setInstallChecked] = useState(false);
-  const [isInstalledApp, setIsInstalledApp] = useState(false);
+  const { data: session, status } = useSession();
+  const userId = status === "authenticated" ? session?.user.id : undefined;
 
   useEffect(() => {
-    if (sessionStatus !== "authenticated") {
-      setInstallChecked(false);
-      setIsInstalledApp(false);
-      return;
+    if (window.isSecureContext && "serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+        // The notification controls surface registration errors when opened in the app.
+      });
     }
+  }, []);
 
-    const installState = getBrowserPwaInstallState();
-    setInstallChecked(true);
-    setIsInstalledApp(installState.installed);
+  return userId ? <DevicePushControls key={userId} userId={userId} /> : null;
+}
 
-    if (!installState.installed) {
-      return;
-    }
+function DevicePushControls({ userId }: { userId: string }) {
+  const [state, setState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
-    const support = getBrowserPushSupport();
-    if (!support.supported) {
-      setStatus(support.reason === "insecure" ? "insecure" : "unsupported");
-      setMessage(getUnsupportedMessage(support.reason));
-      return;
-    }
+  useEffect(() => {
+    const install = getPwaInstallState({
+      hasStandaloneDisplayMode: window.matchMedia("(display-mode: standalone)").matches,
+      hasNavigatorStandalone: Boolean((navigator as Navigator & { standalone?: boolean }).standalone),
+      userAgent: navigator.userAgent,
+      maxTouchPoints: navigator.maxTouchPoints,
+    });
 
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
+    let renewalRequested = false;
+    let currentRead = 0;
 
-    async function registerAndReadState() {
-      try {
-        const registration = await getRegistration();
-        const hasResubscribeFlag = await consumeResubscribeFlag();
-        const subscription = await registration.pushManager.getSubscription();
-
-        if (cancelled) {
-          return;
-        }
-
-        if (hasResubscribeFlag) {
-          if (subscription) {
-            await postSubscription(subscription);
-            if (!cancelled) {
-              setStatus("enabled");
-              setMessage("Assinatura de notificacoes renovada neste dispositivo.");
-            }
-          } else {
-            setStatus("idle");
-            setMessage("Sua assinatura mudou. Ative novamente para continuar recebendo avisos.");
-          }
-
-          return;
-        }
-
-        if (Notification.permission === "denied") {
-          setStatus("blocked");
-        } else if (subscription) {
-          setStatus("enabled");
-        } else {
-          setStatus("idle");
-        }
-      } catch {
-        if (!cancelled) {
-          setStatus("error");
-          setMessage("Erro ao registrar o service worker.");
+    async function readDeviceState() {
+      const read = ++currentRead;
+      function updateState(value: PushState) {
+        if (!signal.aborted && read === currentRead) {
+          setState(value);
         }
       }
-    }
 
-    registerAndReadState();
+      if (!install.installed) {
+        if (install.needsHomeScreenInstall) {
+          updateState({
+            status: "install",
+            message: 'No menu Compartilhar, escolha "Adicionar à Tela de Início" e abra a CROWN pelo ícone.',
+          });
+        }
+        return;
+      }
+
+      const support = getPushSupportState({
+        isSecureContext: window.isSecureContext,
+        hasServiceWorker: "serviceWorker" in navigator,
+        hasPushManager: "PushManager" in window,
+        hasNotification: "Notification" in window,
+      });
+
+      if (!support.supported) {
+        updateState({
+          status: support.reason,
+          message: support.reason === "insecure"
+            ? "Abra a CROWN pelo endereço HTTPS."
+            : "Use um navegador e sistema compatíveis com notificações push.",
+        });
+        return;
+      }
+
+      updateState({ status: "checking" });
+      try {
+        const existingRegistration = await navigator.serviceWorker.getRegistration("/");
+        const registration = await waitForActiveWorker(existingRegistration ??
+          await navigator.serviceWorker.register("/sw.js", { scope: "/" }));
+
+        if (Notification.permission === "denied") {
+          updateState({
+            status: "blocked",
+            message: "Altere a permissão nas configurações do navegador ou do sistema.",
+          });
+          return;
+        }
+
+        const [renew, subscription] = await Promise.all([
+          readResubscribeFlag(),
+          registration.pushManager.getSubscription(),
+        ]);
+
+        const owned = subscription && Notification.permission === "granted" &&
+          !renew && !renewalRequested && await getOwnedSubscription(subscription, signal);
+        if (owned && !renewalRequested) {
+          updateState({ status: "enabled", registration });
+          return;
+        }
+
+        const publicKey = await getVapidKey(signal);
+        updateState(publicKey
+          ? { status: "idle", registration, publicKey, message: renew || renewalRequested ? RENEW_MESSAGE : undefined }
+          : { status: "disabled" });
+      } catch {
+        updateState({ status: "error", message: "Tente verificar as notificações novamente." });
+      }
+    }
 
     function handleMessage(event: MessageEvent) {
       if (event.data?.type === "CROWN_PUSH_SUBSCRIPTION_CHANGE") {
-        setStatus("idle");
-        setMessage("Sua assinatura mudou. Ative novamente para continuar recebendo avisos.");
+        renewalRequested = true;
+        void readDeviceState();
       }
     }
 
-    navigator.serviceWorker.addEventListener("message", handleMessage);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", handleMessage);
+    }
+    void readDeviceState();
 
     return () => {
-      cancelled = true;
-      navigator.serviceWorker.removeEventListener("message", handleMessage);
+      controller.abort();
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleMessage);
+      }
     };
-  }, [sessionStatus]);
-
-  if (sessionStatus !== "authenticated" || !installChecked || !isInstalledApp || status === "enabled") {
-    return null;
-  }
+  }, [attempt]);
 
   async function enableNotifications() {
-    if (busy) {
+    if (busy || !state?.registration || !state.publicKey) {
       return;
     }
 
-    const support = getBrowserPushSupport();
-    if (!support.supported) {
-      setStatus(support.reason === "insecure" ? "insecure" : "unsupported");
-      setMessage(getUnsupportedMessage(support.reason));
-      return;
-    }
-
+    const { registration, publicKey } = state;
     setBusy(true);
-    setMessage(null);
 
     try {
-      const keyResponse = await fetch("/api/push/vapid-public-key", {
-        credentials: "same-origin",
-      });
-
-      if (!keyResponse.ok) {
-        throw new Error("Failed to load VAPID public key");
-      }
-
-      const keyData = (await keyResponse.json()) as VapidPublicKeyResponse;
-      if (!keyData.publicKey) {
-        setStatus("disabled");
-        setMessage("message" in keyData ? keyData.message : statusLabels.disabled);
-        return;
-      }
-
+      // Safari requires the permission request to start in the click gesture.
       const permission = await Notification.requestPermission();
       if (permission === "denied") {
-        setStatus("blocked");
-        setMessage("Permissao bloqueada. Ajuste nas configuracoes do navegador.");
+        setState({ status: "blocked", message: "Altere a permissão nas configurações do navegador ou do sistema." });
         return;
       }
-
       if (permission !== "granted") {
-        setStatus("idle");
-        setMessage("Permissao nao concedida.");
+        setState({ ...state, message: "Permissão não concedida." });
         return;
       }
 
-      const registration = await getRegistration();
-      const existingSubscription = await registration.pushManager.getSubscription();
-      const subscription =
-        existingSubscription ??
-        (await registration.pushManager.subscribe({
+      const subscription = await registration.pushManager.getSubscription() ??
+        await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
-        }));
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
 
-      await postSubscription(subscription);
-      setStatus("enabled");
-      setMessage("Voce recebera avisos importantes da CROWN.");
+      const response = await fetch("/api/push/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...subscription.toJSON(), expectedUserId: userId }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to save push subscription");
+      }
+
+      await clearResubscribeFlag();
+      setState({ status: "enabled", registration, publicKey });
     } catch {
-      setStatus("error");
-      setMessage("Nao foi possivel ativar notificacoes agora.");
+      setState({ ...state, status: "error", message: "Não foi possível ativar notificações agora." });
     } finally {
       setBusy(false);
     }
   }
 
-  const isBlocked = status === "blocked";
-  const canEnable = !busy && !isBlocked && status !== "checking";
+  async function disableNotifications() {
+    if (busy || !state?.registration) {
+      return;
+    }
+
+    const { registration } = state;
+    setBusy(true);
+
+    try {
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        const unsubscribed = await subscription.unsubscribe();
+        if (!unsubscribed && (await registration.pushManager.getSubscription())?.endpoint === subscription.endpoint) {
+          throw new Error("The browser did not remove the push subscription");
+        }
+
+        await fetch("/api/push/subscriptions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint, expectedUserId: userId }),
+        }).catch(() => {
+          // The browser already stopped delivery. The server removes expired endpoints on send.
+        });
+      }
+
+      await clearResubscribeFlag();
+      setAttempt((value) => value + 1);
+    } catch {
+      setState({ ...state, message: "Não foi possível concluir a desativação. Tente novamente." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!state) {
+    return null;
+  }
+
+  const { status, message } = state;
   const isPrompt = status === "idle";
+  const hasEnableAction = Boolean(state.publicKey && state.registration) && (isPrompt || status === "error");
+  const showRetry = status === "disabled" || (status === "error" && !hasEnableAction);
+  const StatusIcon = status === "enabled" ? Bell : BellOff;
 
   return (
-    <div className="fixed left-3 right-3 bottom-20 z-40 mx-auto max-w-sm sm:left-auto sm:right-5 sm:bottom-5">
+    <div className="fixed bottom-20 left-3 right-3 z-40 mx-auto max-w-sm sm:bottom-5 sm:left-auto sm:right-24">
       <div
         className={cn(
           "rounded-2xl border bg-surface/95 shadow-[var(--shadow-card)] backdrop-blur",
           isPrompt ? "border-gold-500/40 px-4 py-3" : "border-gold-500/20 px-3 py-2"
         )}
       >
-        {isPrompt && (
-          <div className="mb-3 rounded-xl bg-gold-500/10 px-3 py-2">
-            <p className="text-sm font-semibold text-brand-900">Receber avisos no telefone?</p>
-            <p className="mt-1 text-xs leading-5 text-text-secondary">
-              Toque em Ativar para o celular abrir a permissao nativa de notificacoes da CROWN.
-            </p>
-          </div>
-        )}
         <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-              "bg-muted/20 text-text-secondary"
-            )}
-          >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted/20 text-text-secondary">
             {busy || status === "checking" ? (
-              <Loader2 size={17} className="animate-spin" />
+              <Loader2 size={17} className="animate-spin" aria-hidden="true" />
             ) : (
-              <BellOff size={17} />
+              <StatusIcon size={17} aria-hidden="true" />
             )}
           </div>
 
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-text-primary">{statusLabels[status]}</p>
-            {message && <p className="mt-0.5 line-clamp-2 text-[11px] text-text-secondary">{message}</p>}
+          <div className="min-w-0 flex-1" role="status">
+            <p className="text-xs font-semibold text-text-primary">{statusLabels[status]}</p>
+            {message && <p className="mt-0.5 text-[11px] text-text-secondary">{message}</p>}
           </div>
 
-          {canEnable && (
+          {hasEnableAction && (
             <button
               type="button"
+              disabled={busy}
               onClick={enableNotifications}
-              className={cn(
-                "shrink-0 rounded-full bg-brand-900 text-xs font-semibold text-gold-500 transition-colors hover:bg-brand-800",
-                isPrompt ? "px-4 py-2" : "px-3 py-1.5"
-              )}
+              className="shrink-0 rounded-full bg-brand-900 px-4 py-2 text-xs font-semibold text-gold-500 transition-colors hover:bg-brand-800 disabled:opacity-50"
             >
               Ativar
             </button>
           )}
-
+          {status === "enabled" && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={disableNotifications}
+              className="shrink-0 rounded-full bg-muted/20 px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-muted/30 disabled:opacity-50"
+            >
+              Desativar
+            </button>
+          )}
+          {showRetry && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setAttempt((value) => value + 1)}
+              className="shrink-0 rounded-full bg-muted/20 px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-muted/30 disabled:opacity-50"
+            >
+              Tentar novamente
+            </button>
+          )}
         </div>
       </div>
     </div>

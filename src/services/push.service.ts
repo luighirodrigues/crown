@@ -1,5 +1,6 @@
 import webPush, { type PushSubscription as WebPushSubscription } from "web-push";
 
+import { hasValidPushKeys, isTrustedPushEndpoint } from "../lib/push/subscription";
 import { normalizeNotificationUrl } from "../lib/push/url";
 import { getVapidConfig } from "../lib/push/vapid";
 import { pushSubscriptionRepository } from "../repositories/push-subscription.repository";
@@ -24,6 +25,7 @@ export type PushDeliveryResult = {
 
 const CONCURRENT_SEND_LIMIT = 10;
 const USER_LOOKUP_BATCH_SIZE = 100;
+const PUSH_TIMEOUT_MS = 5000;
 
 const emptyResult: PushDeliveryResult = {
   attempted: 0,
@@ -80,17 +82,23 @@ async function sendToSubscriptions(subscriptions: PushSubscriptionRecord[], payl
   }
 
   const serializedPayload = createPayload(payload);
+  const now = Date.now();
   const deliveryResults = await mapWithConcurrency(subscriptions, CONCURRENT_SEND_LIMIT, async (subscription) => {
+    if (!isTrustedPushEndpoint(subscription.endpoint) || !hasValidPushKeys(subscription.p256dh, subscription.auth) ||
+      (subscription.expirationTime && subscription.expirationTime.getTime() <= now)) {
+      return { attempted: false, sent: false, endpointToRemove: subscription.endpoint };
+    }
+
     try {
-      await webPush.sendNotification(toWebPushSubscription(subscription), serializedPayload);
-      return { sent: true, endpointToRemove: null };
+      await webPush.sendNotification(toWebPushSubscription(subscription), serializedPayload, { timeout: PUSH_TIMEOUT_MS });
+      return { attempted: true, sent: true, endpointToRemove: null };
     } catch (error) {
       if (isPermanentDeliveryFailure(error)) {
-        return { sent: false, endpointToRemove: subscription.endpoint };
+        return { attempted: true, sent: false, endpointToRemove: subscription.endpoint };
       }
 
       console.error("Web Push delivery failed", error);
-      return { sent: false, endpointToRemove: null };
+      return { attempted: true, sent: false, endpointToRemove: null };
     }
   });
 
@@ -98,12 +106,13 @@ async function sendToSubscriptions(subscriptions: PushSubscriptionRecord[], payl
     .map((result) => result.endpointToRemove)
     .filter((endpoint): endpoint is string => Boolean(endpoint));
   const removed = endpointsToRemove.length > 0 ? await pushSubscriptionRepository.deleteByEndpoints(endpointsToRemove) : { count: 0 };
+  const attempted = deliveryResults.filter((result) => result.attempted).length;
   const sent = deliveryResults.filter((result) => result.sent).length;
 
   return {
-    attempted: subscriptions.length,
+    attempted,
     sent,
-    failed: subscriptions.length - sent,
+    failed: attempted - sent,
     removed: removed.count,
   };
 }

@@ -37,6 +37,11 @@ describe("notification URL helpers", () => {
     );
   });
 
+  it("rejects paths containing control characters", () => {
+    expect(() => requireNotificationUrl("/ini\tcio")).toThrow();
+    expect(normalizeNotificationUrl("/comuni\ndade")).toBe("/inicio");
+  });
+
   it("rejects same-origin absolute URLs that normalize to protocol-relative paths", () => {
     const unsafeUrls = [
       "https://app.crown.test/\\evil.example/path",

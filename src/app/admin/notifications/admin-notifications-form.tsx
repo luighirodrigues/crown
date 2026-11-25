@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { Bell, Loader2, Send } from "lucide-react";
 
 import { Card } from "@/components/card";
 
 type BroadcastResult = {
+  status: "PROCESSING" | "PUSH_PENDING" | "COMPLETED" | "COMPLETED_WITH_PUSH_ERRORS" | "FAILED";
   targetCount: number;
   inAppCount: number;
   pushAttemptCount: number;
@@ -19,11 +20,55 @@ type FormState = {
   linkUrl: string;
 };
 
+type BroadcastAttempt = { idempotencyKey: string; form: FormState };
+
 const emptyForm: FormState = {
   title: "",
   body: "",
   linkUrl: "",
 };
+
+function subscribeToStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+function readSavedAttempt(storageKey: string) {
+  try {
+    return sessionStorage.getItem(storageKey);
+  } catch {
+    return null;
+  }
+}
+
+function parseSavedAttempt(value: string | null): BroadcastAttempt | null {
+  if (!value) return null;
+
+  try {
+    const attempt = JSON.parse(value) as Partial<BroadcastAttempt> | null;
+    if (typeof attempt?.idempotencyKey === "string" &&
+        typeof attempt.form?.title === "string" &&
+        typeof attempt.form.body === "string" &&
+        typeof attempt.form.linkUrl === "string") {
+      return { idempotencyKey: attempt.idempotencyKey, form: attempt.form };
+    }
+  } catch {
+    // Ignore an incomplete or old draft.
+  }
+  return null;
+}
+
+function saveAttempt(storageKey: string, attempt: BroadcastAttempt | null) {
+  try {
+    if (attempt) {
+      sessionStorage.setItem(storageKey, JSON.stringify(attempt));
+    } else {
+      sessionStorage.removeItem(storageKey);
+    }
+  } catch {
+    // The current page can still retry with its in-memory key.
+  }
+}
 
 function createIdempotencyKey() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -33,16 +78,40 @@ function createIdempotencyKey() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function AdminNotificationsForm() {
-  const [form, setForm] = useState<FormState>(emptyForm);
+export function AdminNotificationsForm({ userId }: { userId: string }) {
+  const storageKey = `crown:admin-notification:${userId}`;
+  const savedAttempt = parseSavedAttempt(useSyncExternalStore(
+    subscribeToStorage,
+    () => readSavedAttempt(storageKey),
+    () => null,
+  ));
+  const currentAttempt = useRef<BroadcastAttempt | null>(null);
+  const [draft, setDraft] = useState<FormState | null>(null);
+  const form = draft ?? savedAttempt?.form ?? emptyForm;
   const [result, setResult] = useState<BroadcastResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function editForm(changes: Partial<FormState>) {
+    setDraft((current) => ({ ...(current ?? form), ...changes }));
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setResult(null);
     setError(null);
+
+    const submittedForm = {
+      title: form.title.trim(),
+      body: form.body.trim(),
+      linkUrl: form.linkUrl.trim(),
+    };
+    const previous = currentAttempt.current ?? parseSavedAttempt(readSavedAttempt(storageKey));
+    const sameDraft = previous?.form.title === submittedForm.title &&
+      previous.form.body === submittedForm.body && previous.form.linkUrl === submittedForm.linkUrl;
+    const attempt = sameDraft ? previous : { idempotencyKey: createIdempotencyKey(), form: submittedForm };
+    currentAttempt.current = attempt;
+    saveAttempt(storageKey, attempt);
 
     startTransition(async () => {
       try {
@@ -50,10 +119,9 @@ export function AdminNotificationsForm() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            idempotencyKey: createIdempotencyKey(),
-            title: form.title,
-            body: form.body,
-            linkUrl: form.linkUrl || null,
+            idempotencyKey: attempt.idempotencyKey,
+            ...attempt.form,
+            linkUrl: attempt.form.linkUrl || null,
           }),
         });
         const payload = await response.json();
@@ -63,8 +131,23 @@ export function AdminNotificationsForm() {
           return;
         }
 
+        if (payload.status === "PROCESSING" || payload.status === "PUSH_PENDING") {
+          setError("O envio está em processamento. Tente novamente para consultar o resultado.");
+          return;
+        }
+
+        if (payload.status === "FAILED") {
+          currentAttempt.current = null;
+          saveAttempt(storageKey, null);
+          setDraft(attempt.form);
+          setError("O envio falhou. Tente novamente.");
+          return;
+        }
+
+        currentAttempt.current = null;
+        saveAttempt(storageKey, null);
         setResult(payload);
-        setForm(emptyForm);
+        setDraft(emptyForm);
       } catch {
         setError("Erro ao enviar notificação");
       }
@@ -91,7 +174,8 @@ export function AdminNotificationsForm() {
             type="text"
             placeholder="Título"
             value={form.title}
-            onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+            onChange={(event) => editForm({ title: event.target.value })}
+            disabled={isPending}
             maxLength={120}
             required
             className="w-full text-sm px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
@@ -100,7 +184,8 @@ export function AdminNotificationsForm() {
           <textarea
             placeholder="Mensagem"
             value={form.body}
-            onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))}
+            onChange={(event) => editForm({ body: event.target.value })}
+            disabled={isPending}
             maxLength={2000}
             required
             rows={5}
@@ -111,7 +196,8 @@ export function AdminNotificationsForm() {
             type="text"
             placeholder="Link interno opcional, ex: /inicio"
             value={form.linkUrl}
-            onChange={(event) => setForm((current) => ({ ...current, linkUrl: event.target.value }))}
+            onChange={(event) => editForm({ linkUrl: event.target.value })}
+            disabled={isPending}
             className="w-full text-sm px-3 py-2 rounded-xl border border-muted/30 bg-surface placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-brand-900/30"
           />
 

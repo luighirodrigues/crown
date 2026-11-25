@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { signOut } from "next-auth/react";
+import { signOutCurrentDevice } from "@/lib/push/sign-out";
 import Link from "next/link";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -143,6 +143,7 @@ export function DesktopHeader() {
             )}
             <button
               onClick={() => setNotifOpen(true)}
+              aria-label="Notificações"
               className="p-2 rounded-full hover:bg-surface-alt transition-colors text-text-secondary hover:text-brand-900 relative"
             >
               <Bell size={20} />
@@ -166,7 +167,7 @@ export function DesktopHeader() {
             </Link>
 
             <button
-              onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+              onClick={signOutCurrentDevice}
               className="p-2 rounded-full hover:bg-surface-alt transition-colors text-text-secondary hover:text-brand-900"
               title="Sair"
             >

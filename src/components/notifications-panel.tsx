@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Bell, Heart, MessageCircle, Reply, CheckCircle, Calendar, Megaphone, Check } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
+import { normalizeNotificationUrl } from "@/lib/push/url";
 
 interface Notification {
   id: string;
   type: "LIKE" | "COMMENT" | "REPLY" | "APPROVAL" | "EVENT" | "SYSTEM";
   title: string;
   body: string;
+  linkUrl: string | null;
   read: boolean;
   createdAt: string;
 }
@@ -30,27 +33,29 @@ const typeIcon: Record<Notification["type"], React.ReactNode> = {
 };
 
 export function NotificationsPanel({ open, onClose, onUnreadCountChange }: NotificationsPanelProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const fetchNotifications = useCallback(() => {
-    setLoading(true);
-    fetch("/api/notifications")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) {
-          setNotifications(data.notifications);
-          onUnreadCountChange?.(data.unreadCount);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [onUnreadCountChange]);
+  const router = useRouter();
+  const [loadedNotifications, setNotifications] = useState<Notification[] | null>(null);
+  const notifications = loadedNotifications ?? [];
 
   useEffect(() => {
     if (!open) return;
-    fetchNotifications();
-  }, [open, fetchNotifications]);
+    const controller = new AbortController();
+    fetch("/api/notifications", { signal: controller.signal })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        if (data) {
+          setNotifications(data.notifications);
+          onUnreadCountChange?.(data.unreadCount);
+        } else {
+          setNotifications([]);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setNotifications([]);
+      });
+    return () => controller.abort();
+  }, [open, onUnreadCountChange]);
 
   async function markAllAsRead() {
     await fetch("/api/notifications", {
@@ -58,7 +63,7 @@ export function NotificationsPanel({ open, onClose, onUnreadCountChange }: Notif
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ markAllRead: true }),
     });
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev) => prev?.map((n) => ({ ...n, read: true })) ?? null);
     onUnreadCountChange?.(0);
   }
 
@@ -68,15 +73,25 @@ export function NotificationsPanel({ open, onClose, onUnreadCountChange }: Notif
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    setNotifications((prev) => {
-      const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
-      return updated;
-    });
+    setNotifications((prev) => prev?.map((n) => n.id === id ? { ...n, read: true } : n) ?? null);
     const remaining = notifications.filter((n) => !n.read && n.id !== id).length;
     onUnreadCountChange?.(remaining);
   }
 
   const hasUnread = notifications.some((n) => !n.read);
+
+  function closePanel() {
+    setNotifications(null);
+    onClose();
+  }
+
+  function openNotification(notification: Notification) {
+    if (!notification.read) void markAsRead(notification.id).catch(() => {});
+    if (notification.linkUrl) {
+      closePanel();
+      router.push(normalizeNotificationUrl(notification.linkUrl, window.location.origin));
+    }
+  }
 
   return (
     <AnimatePresence>
@@ -87,7 +102,7 @@ export function NotificationsPanel({ open, onClose, onUnreadCountChange }: Notif
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-[60]"
-            onClick={onClose}
+            onClick={closePanel}
           />
 
           <motion.div
@@ -118,7 +133,8 @@ export function NotificationsPanel({ open, onClose, onUnreadCountChange }: Notif
                   </button>
                 )}
                 <button
-                  onClick={onClose}
+                  onClick={closePanel}
+                  aria-label="Fechar notificações"
                   className="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center text-text-secondary hover:bg-muted/30 transition-colors"
                 >
                   <X size={16} />
@@ -128,7 +144,7 @@ export function NotificationsPanel({ open, onClose, onUnreadCountChange }: Notif
 
             {/* List */}
             <div className="overflow-y-auto flex-1 pb-safe">
-              {loading && notifications.length === 0 ? (
+              {loadedNotifications === null ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="w-6 h-6 border-2 border-brand-900 border-t-transparent rounded-full animate-spin" />
                 </div>
@@ -140,32 +156,35 @@ export function NotificationsPanel({ open, onClose, onUnreadCountChange }: Notif
               ) : (
                 <ul>
                   {notifications.map((n) => (
-                    <li
-                      key={n.id}
-                      onClick={() => !n.read && markAsRead(n.id)}
-                      className={`flex gap-3 px-4 py-3 border-b border-muted/20 transition-colors ${
-                        !n.read
-                          ? "bg-brand-100/10 cursor-pointer hover:bg-brand-100/20"
-                          : ""
-                      }`}
-                    >
-                      <div className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-full bg-surface flex items-center justify-center">
-                        {typeIcon[n.type]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className={`text-sm leading-tight ${!n.read ? "font-semibold text-text-primary" : "text-text-primary"}`}>
-                            {n.title}
-                          </p>
-                          {!n.read && (
-                            <span className="w-2 h-2 rounded-full bg-brand-800 flex-shrink-0" />
-                          )}
+                    <li key={n.id}>
+                      <button
+                        type="button"
+                        disabled={n.read && !n.linkUrl}
+                        onClick={() => openNotification(n)}
+                        className={`flex w-full gap-3 text-left px-4 py-3 border-b border-muted/20 transition-colors ${
+                          !n.read
+                            ? "bg-brand-100/10 cursor-pointer hover:bg-brand-100/20"
+                            : n.linkUrl ? "cursor-pointer hover:bg-brand-100/20" : ""
+                        }`}
+                      >
+                        <div className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-full bg-surface flex items-center justify-center">
+                          {typeIcon[n.type]}
                         </div>
-                        <p className="text-xs text-text-secondary mt-0.5 line-clamp-2">
-                          {n.body}
-                        </p>
-                        <p className="text-[11px] text-muted mt-1">{timeAgo(n.createdAt)}</p>
-                      </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm leading-tight ${!n.read ? "font-semibold text-text-primary" : "text-text-primary"}`}>
+                              {n.title}
+                            </p>
+                            {!n.read && (
+                              <span className="w-2 h-2 rounded-full bg-brand-800 flex-shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-xs text-text-secondary mt-0.5 line-clamp-2">
+                            {n.body}
+                          </p>
+                          <p className="text-[11px] text-muted mt-1">{timeAgo(n.createdAt)}</p>
+                        </div>
+                      </button>
                     </li>
                   ))}
                 </ul>

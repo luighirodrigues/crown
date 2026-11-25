@@ -62,12 +62,12 @@ describe("notification trigger service", () => {
       type: "COMMENT",
       title: "Novo comentário",
       body: 'Ana comentou no seu post "Post Legal"',
-      linkUrl: "/inicio",
+      linkUrl: "/comunidade",
     });
     expect(mocks.sendToUser).toHaveBeenCalledWith("user-1", {
       title: "Novo comentário",
-      body: 'Ana comentou no seu post "Post Legal"',
-      url: "/inicio",
+      body: "Você recebeu um comentário em uma publicação.",
+      url: "/comunidade",
       notificationId: "comment-notification",
     });
     expect(order).toEqual(["create-notification", "send-push"]);
@@ -80,8 +80,8 @@ describe("notification trigger service", () => {
 
     expect(mocks.sendToUser).toHaveBeenCalledWith("user-2", {
       title: "Nova resposta",
-      body: 'Bia respondeu seu comentário em "Post Legal"',
-      url: "/inicio",
+      body: "Você recebeu uma resposta a um comentário.",
+      url: "/comunidade",
       notificationId: "reply-notification",
     });
   });
@@ -141,6 +141,24 @@ describe("notification trigger service", () => {
       url: "/inicio",
     });
     expect(order).toEqual(["create-notifications", "send-push"]);
+  });
+
+  it("keeps rejection details in-app and opens the rituals page for a check-in", async () => {
+    await notificationTriggerService.onApprovalStatusChanged(
+      "user-3",
+      "Check-in",
+      "REJECTED",
+      "Motivo privado",
+    );
+
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.stringContaining("Motivo privado"),
+      linkUrl: "/rituais",
+    }));
+    expect(mocks.sendToUser).toHaveBeenCalledWith("user-3", expect.objectContaining({
+      body: "Seu Check-in foi reprovado.",
+      url: "/rituais",
+    }));
   });
 
   it("keeps likes in-app only", async () => {

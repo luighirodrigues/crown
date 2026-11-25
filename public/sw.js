@@ -1,4 +1,4 @@
-const CACHE_NAME = "crown-pwa-v1";
+const CACHE_NAME = "crown-pwa-v2";
 const STATE_CACHE_NAME = "crown-pwa-state-v1";
 const CACHE_PREFIX = "crown-pwa-";
 const OFFLINE_URL = "/offline";
@@ -35,6 +35,24 @@ function isOutdatedOwnedCache(cacheName) {
     cacheName !== CACHE_NAME &&
     cacheName !== STATE_CACHE_NAME
   );
+}
+
+function isStaticStyleAsset(request, url) {
+  return url.origin === self.location.origin &&
+    url.pathname.startsWith("/_next/static/") &&
+    (request.destination === "style" || request.destination === "font");
+}
+
+async function loadStaticStyleAsset(request) {
+  const cache = await caches.open(CACHE_NAME).catch(() => null);
+  const cached = await cache?.match(request).catch(() => null);
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  if (cache && response.ok && response.headers.get("Cache-Control")?.includes("immutable")) {
+    await cache.put(request, response.clone()).catch(() => {});
+  }
+  return response;
 }
 
 async function persistResubscribeNeededFlag(event) {
@@ -92,12 +110,17 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
-  if (request.method !== "GET" || request.mode !== "navigate") {
+  if (request.method !== "GET") {
     return;
   }
 
   const url = new URL(request.url);
-  if (isBypassedNavigation(url)) {
+  if (isStaticStyleAsset(request, url)) {
+    event.respondWith(loadStaticStyleAsset(request));
+    return;
+  }
+
+  if (request.mode !== "navigate" || isBypassedNavigation(url)) {
     return;
   }
 
@@ -115,7 +138,7 @@ self.addEventListener("push", (event) => {
 
   if (event.data) {
     try {
-      payload = event.data.json();
+      payload = event.data.json() ?? {};
     } catch {
       payload = { body: event.data.text() };
     }
@@ -123,7 +146,7 @@ self.addEventListener("push", (event) => {
 
   const title = payload.title || "CROWN";
   const options = {
-    body: payload.body || "Voce tem uma nova notificacao.",
+    body: payload.body || "Você tem uma nova notificação.",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     tag: payload.notificationId || undefined,
@@ -166,9 +189,8 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil(
-    Promise.all([
-      persistResubscribeNeededFlag(event),
-      notifyOpenClientsOfSubscriptionChange(),
-    ])
+    persistResubscribeNeededFlag(event)
+      .catch(() => {})
+      .then(notifyOpenClientsOfSubscriptionChange)
   );
 });

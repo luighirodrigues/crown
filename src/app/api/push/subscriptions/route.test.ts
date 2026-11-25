@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createECDH } from "node:crypto";
 
 const authMocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
@@ -14,6 +15,7 @@ const authMocks = vi.hoisted(() => ({
 const repositoryMocks = vi.hoisted(() => ({
   upsertForUser: vi.fn(),
   deleteForUser: vi.fn(),
+  hasActiveEndpoint: vi.fn(),
 }));
 
 const vapidMocks = vi.hoisted(() => ({
@@ -23,12 +25,19 @@ const vapidMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth/rbac", () => authMocks);
 vi.mock("@/repositories/push-subscription.repository", () => ({
+  PushSubscriptionConflictError: class PushSubscriptionConflictError extends Error {},
   pushSubscriptionRepository: repositoryMocks,
 }));
 vi.mock("@/lib/push/vapid", () => vapidMocks);
 
-import { DELETE, POST } from "./route";
+import { DELETE, GET as getSubscription, POST } from "./route";
 import { GET } from "../vapid-public-key/route";
+
+const endpoint = "https://fcm.googleapis.com/wp/device-1";
+const keys = {
+  p256dh: createECDH("prime256v1").generateKeys().toString("base64url"),
+  auth: Buffer.alloc(16).toString("base64url"),
+};
 
 function jsonRequest(method: string, body: unknown, headers?: HeadersInit) {
   return new Request("http://localhost/api/push/subscriptions", {
@@ -57,6 +66,48 @@ describe("push subscription API routes", () => {
     expect(repositoryMocks.upsertForUser).not.toHaveBeenCalled();
   });
 
+  it("returns only the current user's subscription status", async () => {
+    repositoryMocks.hasActiveEndpoint.mockResolvedValue(false);
+    const response = await getSubscription(new Request("http://localhost/api/push/subscriptions", {
+      headers: { "X-Crown-Push-Endpoint": endpoint },
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ enabled: false });
+    expect(repositoryMocks.hasActiveEndpoint).toHaveBeenCalledWith("user-1", endpoint);
+  });
+
+  it("requires authentication before checking subscription status", async () => {
+    authMocks.requireAuth.mockRejectedValue(new Error("Não autenticado"));
+    const response = await getSubscription(new Request("http://localhost/api/push/subscriptions", {
+      headers: { "X-Crown-Push-Endpoint": endpoint },
+    }));
+
+    expect(response.status).toBe(401);
+    expect(repositoryMocks.hasActiveEndpoint).not.toHaveBeenCalled();
+  });
+
+  it("rejects an arbitrary HTTPS destination before saving a subscription", async () => {
+    const response = await POST(jsonRequest("POST", {
+      endpoint: "https://push.example/device-1",
+      keys,
+    }));
+
+    expect(response.status).toBe(400);
+    expect(repositoryMocks.upsertForUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects endpoints beyond the database column length", async () => {
+    const longEndpoint = `https://fcm.googleapis.com/wp/${"x".repeat(2048)}`;
+    const registered = await POST(jsonRequest("POST", { endpoint: longEndpoint, keys }));
+    const removed = await DELETE(jsonRequest("DELETE", { endpoint: longEndpoint }));
+
+    expect(registered.status).toBe(400);
+    expect(removed.status).toBe(400);
+    expect(repositoryMocks.upsertForUser).not.toHaveBeenCalled();
+    expect(repositoryMocks.deleteForUser).not.toHaveBeenCalled();
+  });
+
   it("rejects unauthenticated delete requests without deleting a subscription", async () => {
     authMocks.requireAuth.mockRejectedValue(new Error("Não autenticado"));
 
@@ -73,8 +124,8 @@ describe("push subscription API routes", () => {
       jsonRequest(
         "POST",
         {
-          endpoint: "https://push.example/device-1",
-          keys: { p256dh: "p256dh-key", auth: "auth-secret" },
+          endpoint,
+          keys,
           expirationTime: 1772323200000,
         },
         { "user-agent": "Firefox" }
@@ -83,9 +134,8 @@ describe("push subscription API routes", () => {
 
     expect(response.status).toBe(201);
     expect(repositoryMocks.upsertForUser).toHaveBeenCalledWith("user-1", {
-      endpoint: "https://push.example/device-1",
-      p256dh: "p256dh-key",
-      auth: "auth-secret",
+      endpoint,
+      ...keys,
       expirationTime: new Date(1772323200000),
       userAgent: "Firefox",
     });
@@ -94,7 +144,7 @@ describe("push subscription API routes", () => {
   it("rejects malformed subscription bodies", async () => {
     const response = await POST(
       jsonRequest("POST", {
-        endpoint: "https://push.example/device-1",
+        endpoint,
         keys: { p256dh: "p256dh-key" },
       })
     );
@@ -102,6 +152,26 @@ describe("push subscription API routes", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: "Invalid push subscription" });
     expect(repositoryMocks.upsertForUser).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "https://updates.push.services.mozilla.com/wpush/v2/device-1",
+    "https://web.push.apple.com/device-1",
+    "https://wns2-by3p.notify.windows.com/?channel=device-1",
+  ])("accepts a browser subscription from %s", async (providerEndpoint) => {
+    const response = await POST(jsonRequest("POST", { endpoint: providerEndpoint, keys }));
+    expect(response.status).toBe(201);
+  });
+
+  it("rejects a subscription operation if the authenticated user changed", async () => {
+    const body = { endpoint, keys, expectedUserId: "user-previous" };
+    const registered = await POST(jsonRequest("POST", body));
+    const removed = await DELETE(jsonRequest("DELETE", body));
+
+    expect(registered.status).toBe(409);
+    expect(removed.status).toBe(409);
+    expect(repositoryMocks.upsertForUser).not.toHaveBeenCalled();
+    expect(repositoryMocks.deleteForUser).not.toHaveBeenCalled();
   });
 
   it("rejects non-HTTPS push endpoints", async () => {

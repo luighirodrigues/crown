@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { signOut } from "next-auth/react";
+import { signOutCurrentDevice } from "@/lib/push/sign-out";
 import { cn } from "@/lib/utils";
 import { Bell, LogOut, ChevronLeft, Shield } from "lucide-react";
 import Link from "next/link";
@@ -86,6 +86,7 @@ export function AppHeader({
             )}
             <button
               onClick={() => setNotifOpen(true)}
+              aria-label="Notificações"
               className="p-2 rounded-full hover:bg-white/10 transition-colors relative"
             >
               <Bell size={20} />
@@ -96,7 +97,8 @@ export function AppHeader({
               )}
             </button>
             <button
-              onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+              onClick={signOutCurrentDevice}
+              aria-label="Sair"
               className="p-2 rounded-full hover:bg-white/10 transition-colors"
             >
               <LogOut size={18} />
